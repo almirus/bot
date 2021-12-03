@@ -16,7 +16,7 @@ public class TempOwner implements Serializable {
     private Long id;
 
     @Column(name = "real_num")
-    private int realNum;
+    private Integer realNum;
 
     @Column(name = "phone_num")
     private String phoneNum;

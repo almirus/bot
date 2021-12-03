@@ -362,6 +362,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         CreateChatInviteLink createChatInviteLink = new CreateChatInviteLink();
         //TODO не понятно как дать доступ конкретному пользователю к конкретному чату
         createChatInviteLink.setChatId(privateChannelId);
+        createChatInviteLink.setCreatesJoinRequest(true);
         ChatInviteLink chatInviteLink = execute(createChatInviteLink);
         return chatInviteLink.getInviteLink();
     }
@@ -623,29 +624,37 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleSendToAdminCommand(User user, String telegramUserId) throws TelegramApiException {
         TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
         Apartment apartment = apartmentService.getApartment(tmpOwner.getRealNum());
-        // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
         String owners = apartment.getOwnerList().size() > 0 ? apartment.getOwnerList().stream().map(item ->
                 String.format("""
                                 <a href="tg://user?id=%s">%s</a>
                                 """,
                         item.getTelegramId(), item.getName())
         ).collect(joining(", ")) : "Пока нет";
+        SendMessage messageSuccess = new SendMessage();
+        String status;
+        // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
+        if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
+            messageSuccess.setText("🎉 Добро пожаловать в чат...");
+            status = "Пользователь получил полный доступ автоматически";
+            // TODO нужна генерация ссылки на приватный чат
+            addOwnerToDb(tmpOwner, apartment);
+        } else {
+            messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
+            status = "Пользователь запросил полный доступ";
+        }
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
         sendRequestToSupport(String.format("""
-                        Пользователь запросил полный доступ
+                        %s
                         Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
                         Были введены данные: Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
-                        --------------------               
+                        --------------------             
                         В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
                         Другие владельцы: %s
-                        """,
+                        """, status,
                 user.getId(), tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(),
                 apartment.getFloor(), apartment.getId(), apartment.getDduNum(),
                 owners));
-
-        SendMessage messageSuccess = new SendMessage();
-        messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
-        messageSuccess.setChatId(String.valueOf(telegramUserId));
-        messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
         return messageSuccess;
     }
 
@@ -725,6 +734,20 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardMarkup.setKeyboard(keyboardButtons);
 
         return inlineKeyboardMarkup;
+    }
+
+    private Owner addOwnerToDb(TempOwner tmpOwner, Apartment apartment) {
+        Owner owner = new Owner();
+        owner.setId(tmpOwner.getId());
+        owner.setRealNum(tmpOwner.getRealNum());
+        owner.setName(tmpOwner.getName());
+        owner.setTelegramId(tmpOwner.getTelegramId());
+        owner.setCarPlace(tmpOwner.getCarPlace());
+        owner.setFloor(tmpOwner.getFloor());
+        owner.setPhoneNum(tmpOwner.getPhoneNum());
+        owner.getApartmentList().add(apartment);
+        tempOwnerService.delete(tmpOwner);
+        return ownerService.add(owner);
     }
 
 }
