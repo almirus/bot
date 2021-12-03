@@ -1,0 +1,29 @@
+server:
+  servlet:
+    context-path: /api
+#logging:
+#  level:
+#    ROOT: DEBUG
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password:
+  jpa:
+    properties:
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+      hibernate.globally_quoted_identifiers: true
+telegram:
+  name: kvartaly_44k2_bot
+# @BotFather
+  token:
+#  canal -1546628053 мой новый тестовый канал
+#  -1177346871 мой новый тестовый чат
+#  -1688679526 офиц приватный новый чат
+# открытие для меня - к ID чата нужно добавлять 100
+# https://github.com/GabrielRF/telegram-id#web-group-id
+  chanel-id:  -100XXXXXXXXX
+  support:
+# @getidsbot - get admin id
+    chat-id: XXXXXXXXXX
