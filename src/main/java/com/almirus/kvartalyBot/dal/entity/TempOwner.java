@@ -1,4 +1,4 @@
-package com.example.buns.dal.entity;
+package com.almirus.kvartalyBot.dal.entity;
 
 import lombok.Data;
 

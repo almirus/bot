@@ -1,13 +1,13 @@
-package com.example.buns;
+package com.almirus.kvartalyBot;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class BunsApplication {
+public class BotApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(BunsApplication.class, args);
+		SpringApplication.run(BotApplication.class, args);
 	}
 
 }

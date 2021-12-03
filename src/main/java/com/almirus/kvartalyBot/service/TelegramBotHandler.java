@@ -1,8 +1,8 @@
-package com.example.buns.service;
+package com.almirus.kvartalyBot.service;
 
-import com.example.buns.dal.entity.Apartment;
-import com.example.buns.dal.entity.Owner;
-import com.example.buns.dal.entity.TempOwner;
+import com.almirus.kvartalyBot.dal.entity.Apartment;
+import com.almirus.kvartalyBot.dal.entity.Owner;
+import com.almirus.kvartalyBot.dal.entity.TempOwner;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

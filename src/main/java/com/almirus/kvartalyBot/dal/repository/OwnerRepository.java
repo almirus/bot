@@ -1,7 +1,7 @@
-package com.example.buns.dal.repository;
+package com.almirus.kvartalyBot.dal.repository;
 
 
-import com.example.buns.dal.entity.Owner;
+import com.almirus.kvartalyBot.dal.entity.Owner;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.repository.CrudRepository;
 

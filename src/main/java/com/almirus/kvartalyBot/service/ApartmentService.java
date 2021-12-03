@@ -1,7 +1,7 @@
-package com.example.buns.service;
+package com.almirus.kvartalyBot.service;
 
-import com.example.buns.dal.entity.Apartment;
-import com.example.buns.dal.repository.ApartmentRepository;
+import com.almirus.kvartalyBot.dal.entity.Apartment;
+import com.almirus.kvartalyBot.dal.repository.ApartmentRepository;
 import lombok.Data;
 import org.springframework.stereotype.Service;
 
