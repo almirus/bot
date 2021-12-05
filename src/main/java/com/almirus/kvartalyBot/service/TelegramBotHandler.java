@@ -9,9 +9,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
+import org.telegram.telegrambots.meta.api.methods.groupadministration.CreateChatInviteLink;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.ExportChatInviteLink;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.UnbanChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.ChatInviteLink;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ForceReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -365,8 +367,11 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     }
 
     private String getChatInviteLink() throws TelegramApiException {
-        ExportChatInviteLink exportChatInviteLink = new ExportChatInviteLink(privateChannelId);
-        return execute(exportChatInviteLink);
+        CreateChatInviteLink createChatInviteLink = new CreateChatInviteLink();
+        createChatInviteLink.setChatId(privateChannelId);
+        createChatInviteLink.setMemberLimit(1);
+        ChatInviteLink chatInviteLink = execute(createChatInviteLink);
+        return chatInviteLink.getInviteLink();
     }
 
     private SendMessage handleAboutRoomCommand(String telegramUserId) throws TelegramApiException {
