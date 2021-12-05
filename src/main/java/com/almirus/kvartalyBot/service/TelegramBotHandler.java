@@ -9,12 +9,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
-import org.telegram.telegrambots.meta.api.methods.groupadministration.CreateChatInviteLink;
+import org.telegram.telegrambots.meta.api.methods.groupadministration.ExportChatInviteLink;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.UnbanChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.objects.ChatInviteLink;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ForceReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -106,7 +104,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     }
 
     public void onUpdateReceived(Update update) {
-        if (update.hasMessage() && (update.getMessage().hasText() || update.getMessage().hasContact())) {
+        //!update.getMessage().getChatId().equals(Long.parseLong(privateChannelId)) - выключает бота в закрытом чате, но доступен в приватном чате с ботом
+        if (update.hasMessage() && !update.getMessage().getChatId().equals(Long.parseLong(privateChannelId)) && (update.getMessage().hasText() || update.getMessage().hasContact())) { //текст, ответ боту, отправка контакта
             String text = update.getMessage().hasText() ? update.getMessage().getText() : "";
             String reply = update.getMessage().getReplyToMessage() != null ? update.getMessage().getReplyToMessage().getText() : "";
             String phone = update.getMessage().hasContact() ? update.getMessage().getContact().getPhoneNumber() : "";
@@ -114,8 +113,6 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
             try {
                 //todo Нужен рефакторинг!
-
-
                 Pattern patternFloor = Pattern.compile("^этаж$");
                 Pattern patternRoom = Pattern.compile("^квартира$");
                 Pattern patternName = Pattern.compile("^имя$");
@@ -158,13 +155,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     execute(message);
                 } else if (matcherCar.find()) {
                     sendCarPlaceInfo(text, String.valueOf(telegramUserId));
-                    SendMessage message = handleSuccessCommand();
+                    SendMessage message = handleSuccessCommand(String.valueOf(telegramUserId));
                     message.enableHtml(true);
                     message.setParseMode(ParseMode.HTML);
                     message.setChatId(String.valueOf(telegramUserId));
                     execute(message);
                 } else {
-                    SendMessage message = getCommandResponse(text, update.getMessage().getFrom(), String.valueOf(telegramUserId));
+                    SendMessage message = getCommandResponse(text, String.valueOf(telegramUserId), String.valueOf(telegramUserId));
                     message.enableHtml(true);
                     message.setParseMode(ParseMode.HTML);
                     message.setChatId(String.valueOf(telegramUserId));
@@ -181,13 +178,21 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     ex.printStackTrace();
                 }
             }
-        } else if (update.hasCallbackQuery()) {
+        } else if (update.hasCallbackQuery() && !update.getCallbackQuery().getMessage().getChatId().equals(Long.parseLong(privateChannelId))) { //нажатие по кнопке
             try {
-                SendMessage message = getCommandResponse(update.getCallbackQuery().getData(), update.getCallbackQuery().getFrom(), String.valueOf(update.getCallbackQuery().getMessage().getChatId()));
-                message.enableHtml(true);
-                message.setParseMode(ParseMode.HTML);
-                message.setChatId(String.valueOf(update.getCallbackQuery().getMessage().getChatId()));
-                execute(message);
+                /*  command - команда по кнопке
+                    telegramId - текущий ID пользователя кто общается с ботом
+                    forTelegramId - ID над кем производится действие
+                 */
+                Pattern commandPattern = Pattern.compile("(/[a-z_]+)/?(\\d+)?");
+                Matcher matcherCommand = commandPattern.matcher(update.getCallbackQuery().getData());
+                if (matcherCommand.find()) {
+                    SendMessage message = getCommandResponse(matcherCommand.group(1), matcherCommand.group(2), String.valueOf(update.getCallbackQuery().getMessage().getChatId()));
+                    message.enableHtml(true);
+                    message.setParseMode(ParseMode.HTML);
+                    message.setChatId(String.valueOf(update.getCallbackQuery().getMessage().getChatId()));
+                    execute(message);
+                }
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
@@ -267,14 +272,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     }
 
 
-    private void sendRequestToSupport(String message) throws TelegramApiException {
+    private void sendRequestToSupport(String message, String userId) throws TelegramApiException {
         InlineKeyboardButton inlineKeyboardButtonApprove = new InlineKeyboardButton();
         inlineKeyboardButtonApprove.setText("✅ Добавить");
-        inlineKeyboardButtonApprove.setCallbackData(COMMANDS.ADD.getCommand());
+        inlineKeyboardButtonApprove.setCallbackData(COMMANDS.ADD.getCommand() + "/" + userId);
 
         InlineKeyboardButton inlineKeyboardButtonCancel = new InlineKeyboardButton();
         inlineKeyboardButtonCancel.setText("🚫 Отказать пользователю");
-        inlineKeyboardButtonCancel.setCallbackData(COMMANDS.DELETE.getCommand());
+        inlineKeyboardButtonCancel.setCallbackData(COMMANDS.DELETE.getCommand() + "/" + userId);
 
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
@@ -302,7 +307,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         execute(messageSupport);
     }
 
-    private SendMessage getCommandResponse(String text, User user, String telegramUserId) throws TelegramApiException {
+    private SendMessage getCommandResponse(String text, String user, String telegramUserId) throws TelegramApiException {
+
         if (text.equals(COMMANDS.INFO.getCommand())) {
             return handleInfoCommand();
         }
@@ -333,17 +339,17 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return handleSendToAdminCommand(user, telegramUserId);
         }
         if (text.equals(COMMANDS.DELETE.getCommand())) {
-            return handleDeleteDataCommand(telegramUserId);
+            return handleDeleteDataCommand(user, telegramUserId);
         }
         if (text.equals(COMMANDS.CAR_NOT_EXIST.getCommand())) {
             sendCarPlaceInfo("", String.valueOf(telegramUserId));
-            return handleSuccessCommand();
+            return handleSuccessCommand(String.valueOf(telegramUserId));
         }
         if (text.equals(COMMANDS.CAR_EXIST.getCommand())) {
             return handleAccessCarCommand(telegramUserId);
         }
         if (text.equals(COMMANDS.ADD.getCommand())) {
-            return handleAccessAddCommand(telegramUserId);
+            return handleAccessAddCommand(user, telegramUserId);
         }
         if (text.equals(COMMANDS.REMOVE.getCommand())) {
             return handleAccessCarCommand(telegramUserId);
@@ -359,12 +365,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     }
 
     private String getChatInviteLink() throws TelegramApiException {
-        CreateChatInviteLink createChatInviteLink = new CreateChatInviteLink();
-        //TODO не понятно как дать доступ конкретному пользователю к конкретному чату
-        createChatInviteLink.setChatId(privateChannelId);
-        createChatInviteLink.setCreatesJoinRequest(true);
-        ChatInviteLink chatInviteLink = execute(createChatInviteLink);
-        return chatInviteLink.getInviteLink();
+        ExportChatInviteLink exportChatInviteLink = new ExportChatInviteLink(privateChannelId);
+        return execute(exportChatInviteLink);
     }
 
     private SendMessage handleAboutRoomCommand(String telegramUserId) throws TelegramApiException {
@@ -594,17 +596,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     }
 
-    private SendMessage handleAccessAddCommand(String telegramUserId) throws TelegramApiException {
+    private SendMessage handleAccessAddCommand(String user, String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
-        message.setChatId(telegramUserId);
+        message.setChatId(user);
         if (isAdmin(telegramUserId)) {
-
             try {
                 UnbanChatMember unbanChatMember = new UnbanChatMember();
                 unbanChatMember.setChatId(privateChannelId);
                 unbanChatMember.setOnlyIfBanned(true);
-                unbanChatMember.setUserId(Long.valueOf(telegramUserId));
-
+                unbanChatMember.setUserId(Long.valueOf(user));
                 execute(unbanChatMember);
             } catch (TelegramApiException e) {
                 try {
@@ -614,14 +614,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 }
             }
             message.setText("Вам выдан полный доступ: " + getChatInviteLink());
-            sendInfoToSupport("Выдан полный доступ для пользователя " + telegramUserId);
+            sendInfoToSupport("Выдан полный доступ для пользователя " + user);
         } else {
             message.setText("⚠️У вас нет прав доступа к этому функционалу!");
         }
         return message;
     }
 
-    private SendMessage handleSendToAdminCommand(User user, String telegramUserId) throws TelegramApiException {
+    private SendMessage handleSendToAdminCommand(String user, String telegramUserId) throws TelegramApiException {
         TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
         Apartment apartment = apartmentService.getApartment(tmpOwner.getRealNum());
         String owners = apartment.getOwnerList().size() > 0 ? apartment.getOwnerList().stream().map(item ->
@@ -652,13 +652,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                         В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
                         Другие владельцы: %s
                         """, status,
-                user.getId(), tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(),
+                user, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(),
                 apartment.getFloor(), apartment.getId(), apartment.getDduNum(),
-                owners));
+                owners), user);
         return messageSuccess;
     }
 
-    private SendMessage handleDeleteDataCommand(String telegramUserId) throws TelegramApiException {
+    private SendMessage handleDeleteDataCommand(String userId, String telegramUserId) throws TelegramApiException {
         TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
         SendMessage messageSuccess = new SendMessage();
         tempOwnerService.delete(tmpOwner);
@@ -668,19 +668,19 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         return messageSuccess;
     }
 
-    private SendMessage handleSuccessCommand() {
+    private SendMessage handleSuccessCommand(String userId) {
         SendMessage message = new SendMessage();
         message.setText("Почти все готово");
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
         inlineKeyboardButtonBegin.setText(SEND_TO_ADMIN_LABEL);
-        inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand());
+        inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand() + "/" + userId);
 
         InlineKeyboardButton inlineKeyboardButtonCancel = new InlineKeyboardButton();
         inlineKeyboardButtonCancel.setText(SEND_TO_ADMIN_CANCEL_LABEL);
         inlineKeyboardButtonCancel.setCallbackData(COMMANDS.DELETE.getCommand());
 
 
-        inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand());
+        inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand() + "/" + userId);
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
         List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
