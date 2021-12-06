@@ -1,7 +1,6 @@
 package com.almirus.kvartalyBot.service;
 
 import com.almirus.kvartalyBot.dal.entity.TempOwner;
-
 import com.almirus.kvartalyBot.dal.repository.TempOwnerRepository;
 import lombok.Data;
 import org.springframework.stereotype.Service;
@@ -16,6 +15,11 @@ public class TempOwnerService {
     public boolean isUserExist(String chatId) {
         TempOwner user = userRepository.getOwnerByTelegramId(chatId);
         return user != null;
+    }
+
+    public boolean isDataComplete(String chatId) {
+        TempOwner user = userRepository.getOwnerByTelegramId(chatId);
+        return user.getRealNum() != null && user.getFloor() != null && user.getName() != null && user.getCarPlace() != null;
     }
 
     public TempOwner getUser(String chatId) {

@@ -15,9 +15,6 @@ public class Owner implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "real_num")
-    private int realNum;
-
     @Column(name = "phone_num")
     private String phoneNum;
 
@@ -33,11 +30,9 @@ public class Owner implements Serializable {
     inverseJoinColumns = @JoinColumn(name = "apartment_real_num"))
     private List<Apartment> apartmentList = new java.util.ArrayList<>();
 
-    @Column(name = "floor")
-    private Integer floor;
 
-    @Column(name = "activated")
-    private Boolean activated = Boolean.FALSE;
+    @Column(name = "activated_telegram_id")
+    private String activatedTelegramId;
 
     @Column(name = "car_place")
     private String carPlace;

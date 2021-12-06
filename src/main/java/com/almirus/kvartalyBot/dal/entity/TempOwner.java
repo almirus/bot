@@ -33,6 +33,4 @@ public class TempOwner implements Serializable {
     @Column(name = "car_place")
     private String carPlace;
 
-    @Column(name = "chat_id")
-    private String chatId;
 }

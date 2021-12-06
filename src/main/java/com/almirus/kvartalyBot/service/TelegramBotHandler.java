@@ -127,7 +127,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 Matcher matcherCar = patternCar.matcher(reply);
 
                 if (matcherFloor.find()) {
-                    sendFloorInfo(Integer.parseInt(text), String.valueOf(telegramUserId), String.valueOf(update.getMessage().getChatId()));
+                    sendFloorInfo(Integer.parseInt(text), String.valueOf(telegramUserId));
                     SendMessage message = handleAccessRoomCommand(String.valueOf(telegramUserId));
                     message.enableHtml(true);
                     message.setParseMode(ParseMode.HTML);
@@ -211,14 +211,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
 
     // todo Нужен рефакторинг, объединить в одну функцию сохранения
-    private void sendFloorInfo(Integer floor, String telegramUserId, String chatId) {
+    private void sendFloorInfo(Integer floor, String telegramUserId) {
         TempOwner tmpOwner;
         if (tempOwnerService.isUserExist(telegramUserId)) {
             tmpOwner = tempOwnerService.getUser(telegramUserId);
         } else {
             tmpOwner = new TempOwner();
             tmpOwner.setTelegramId(telegramUserId);
-            tmpOwner.setChatId(chatId);
         }
         tmpOwner.setFloor(floor);
         tempOwnerService.add(tmpOwner);
@@ -488,7 +487,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return message;
         }
         // есть во временной таблице
-        if (tempOwnerService.isUserExist(telegramUserId)) {
+        if (tempOwnerService.isUserExist(telegramUserId) && tempOwnerService.isDataComplete(telegramUserId)) {
             message.setText("""
                     Вы уже подавали заявку на доступ. Подождите...
                     """);
@@ -622,8 +621,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     ex.printStackTrace();
                 }
             }
-            sendInfoToUser(userId, "Вам выдан полный доступ: " + getChatInviteLink());
+            sendInfoToUser(userId, "Вам выдан полный доступ, нажмите здесь: " + getChatInviteLink());
             message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
+            TempOwner tempOwner = tempOwnerService.getUser(userId);
+            addOwnerToDb(tempOwner, telegramUserId);
         } else {
             message.setText("⚠️У вас нет прав доступа к этому функционалу!");
         }
@@ -643,10 +644,11 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         String status;
         // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
         if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
-            messageSuccess.setText("🎉 Добро пожаловать в чат...");
+            messageSuccess.setText("🎉 Добро пожаловать в чат!");
             status = "Пользователь получил полный доступ автоматически";
-            // TODO нужна генерация ссылки на приватный чат
-            addOwnerToDb(tmpOwner, apartment);
+            sendInfoToUser(userId, "Вам выдан полный доступ, нажмите здесь: " + getChatInviteLink());
+            // активирует запись бот, записываем его ID
+            addOwnerToDb(tmpOwner, token.substring(0, token.indexOf(":")));
         } else {
             messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
             status = "Пользователь запросил полный доступ";
@@ -745,15 +747,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         return inlineKeyboardMarkup;
     }
 
-    private Owner addOwnerToDb(TempOwner tmpOwner, Apartment apartment) {
+    private Owner addOwnerToDb(TempOwner tmpOwner, String activatedBy) {
         Owner owner = new Owner();
         owner.setId(tmpOwner.getId());
-        owner.setRealNum(tmpOwner.getRealNum());
         owner.setName(tmpOwner.getName());
         owner.setTelegramId(tmpOwner.getTelegramId());
         owner.setCarPlace(tmpOwner.getCarPlace());
-        owner.setFloor(tmpOwner.getFloor());
         owner.setPhoneNum(tmpOwner.getPhoneNum());
+        owner.setActivatedTelegramId(activatedBy);
+        Apartment apartment = apartmentService.getApartment(tmpOwner.getRealNum());
         owner.getApartmentList().add(apartment);
         tempOwnerService.delete(tmpOwner);
         return ownerService.add(owner);
