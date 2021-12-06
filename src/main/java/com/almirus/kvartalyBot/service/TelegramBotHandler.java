@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.CreateChatInviteLink;
-import org.telegram.telegrambots.meta.api.methods.groupadministration.ExportChatInviteLink;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.UnbanChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.ChatInviteLink;
@@ -128,7 +127,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 Matcher matcherCar = patternCar.matcher(reply);
 
                 if (matcherFloor.find()) {
-                    sendFloorInfo(Integer.parseInt(text), String.valueOf(telegramUserId));
+                    sendFloorInfo(Integer.parseInt(text), String.valueOf(telegramUserId), String.valueOf(update.getMessage().getChatId()));
                     SendMessage message = handleAccessRoomCommand(String.valueOf(telegramUserId));
                     message.enableHtml(true);
                     message.setParseMode(ParseMode.HTML);
@@ -212,13 +211,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
 
     // todo Нужен рефакторинг, объединить в одну функцию сохранения
-    private void sendFloorInfo(Integer floor, String telegramUserId) {
+    private void sendFloorInfo(Integer floor, String telegramUserId, String chatId) {
         TempOwner tmpOwner;
         if (tempOwnerService.isUserExist(telegramUserId)) {
             tmpOwner = tempOwnerService.getUser(telegramUserId);
         } else {
             tmpOwner = new TempOwner();
             tmpOwner.setTelegramId(telegramUserId);
+            tmpOwner.setChatId(chatId);
         }
         tmpOwner.setFloor(floor);
         tempOwnerService.add(tmpOwner);
@@ -301,12 +301,16 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         execute(messageSupport);
     }
 
-    private void sendInfoToSupport(String message) throws TelegramApiException {
+    private void sendInfoToUser(String telegramId, String message) throws TelegramApiException {
         SendMessage messageSupport = new SendMessage();
         messageSupport.setText(message);
-        messageSupport.setChatId(supportChatId);
+        messageSupport.setChatId(telegramId);
         messageSupport.enableHtml(true);
         execute(messageSupport);
+    }
+
+    private void sendInfoToSupport(String message) throws TelegramApiException {
+        sendInfoToUser(supportChatId, message);
     }
 
     private SendMessage getCommandResponse(String text, String user, String telegramUserId) throws TelegramApiException {
@@ -344,7 +348,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return handleDeleteDataCommand(user, telegramUserId);
         }
         if (text.equals(COMMANDS.CAR_NOT_EXIST.getCommand())) {
-            sendCarPlaceInfo("", String.valueOf(telegramUserId));
+            sendCarPlaceInfo("Нет", String.valueOf(telegramUserId));
             return handleSuccessCommand(String.valueOf(telegramUserId));
         }
         if (text.equals(COMMANDS.CAR_EXIST.getCommand())) {
@@ -484,7 +488,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return message;
         }
         // есть во временной таблице
-        if (tempOwnerService.isUserExist(telegramUserId) && !tempOwnerService.getUser(telegramUserId).getComplete()) {
+        if (tempOwnerService.isUserExist(telegramUserId)) {
             message.setText("""
                     Вы уже подавали заявку на доступ. Подождите...
                     """);
@@ -601,15 +605,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     }
 
-    private SendMessage handleAccessAddCommand(String user, String telegramUserId) throws TelegramApiException {
+    private SendMessage handleAccessAddCommand(String userId, String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
-        message.setChatId(user);
+        message.setChatId(userId);
         if (isAdmin(telegramUserId)) {
             try {
                 UnbanChatMember unbanChatMember = new UnbanChatMember();
                 unbanChatMember.setChatId(privateChannelId);
                 unbanChatMember.setOnlyIfBanned(true);
-                unbanChatMember.setUserId(Long.valueOf(user));
+                unbanChatMember.setUserId(Long.valueOf(userId));
                 execute(unbanChatMember);
             } catch (TelegramApiException e) {
                 try {
@@ -618,15 +622,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     ex.printStackTrace();
                 }
             }
-            message.setText("Вам выдан полный доступ: " + getChatInviteLink());
-            sendInfoToSupport("Выдан полный доступ для пользователя " + user);
+            sendInfoToUser(userId, "Вам выдан полный доступ: " + getChatInviteLink());
+            message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
         } else {
             message.setText("⚠️У вас нет прав доступа к этому функционалу!");
         }
         return message;
     }
 
-    private SendMessage handleSendToAdminCommand(String user, String telegramUserId) throws TelegramApiException {
+    private SendMessage handleSendToAdminCommand(String userId, String telegramUserId) throws TelegramApiException {
         TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
         Apartment apartment = apartmentService.getApartment(tmpOwner.getRealNum());
         String owners = apartment.getOwnerList().size() > 0 ? apartment.getOwnerList().stream().map(item ->
@@ -657,9 +661,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                         В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
                         Другие владельцы: %s
                         """, status,
-                user, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(),
+                userId, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(),
                 apartment.getFloor(), apartment.getId(), apartment.getDduNum(),
-                owners), user);
+                owners), userId);
         return messageSuccess;
     }
 
