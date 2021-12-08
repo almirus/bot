@@ -5,6 +5,7 @@ import com.almirus.kvartalyBot.dal.entity.Owner;
 import com.almirus.kvartalyBot.dal.entity.TempOwner;
 import com.almirus.kvartalyBot.util.Permission;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
 
 import static java.util.stream.Collectors.joining;
 
+@EqualsAndHashCode(callSuper = true)
 @Component
 @Data
 @Slf4j
