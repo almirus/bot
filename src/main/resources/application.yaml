@@ -7,23 +7,20 @@ server:
 spring:
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/postgres
-    username: postgres
-    password:
+    url: jdbc:postgresql://localhost:${DB_OUT_PORT}/postgres
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
   jpa:
     properties:
       hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
       hibernate.globally_quoted_identifiers: true
 telegram:
-  name: kvartaly_44k2_bot
+  name: ${BOT_NAME}
 # @BotFather
-  token:
-#  canal -1546628053 мой новый тестовый канал
-#  -1177346871 мой новый тестовый чат
-#  -1688679526 офиц приватный новый чат
+  token: ${BOT_TOKEN}
 # открытие для меня - к ID чата нужно добавлять 100
 # https://github.com/GabrielRF/telegram-id#web-group-id
-  chanel-id:  -100XXXXXXXXX
+  chanel-id:  ${PRIVATE_CHANNEL}
   support:
 # @getidsbot - get admin id
-    chat-id: XXXXXXXXXX
+    chat-id: ${SUPPORT_ID}

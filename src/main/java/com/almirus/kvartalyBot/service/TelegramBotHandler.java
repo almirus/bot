@@ -178,7 +178,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
-                    sendInfoToSupport("Error " + e.getMessage());
+                    sendDebugToOwner("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -198,7 +198,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
-                    sendInfoToSupport("Error " + e.getMessage());
+                    sendDebugToOwner("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -292,32 +292,31 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         keyboardButtons.add(keyboardButtonsRow1);
 
         inlineKeyboardMarkup.setKeyboard(keyboardButtons);
-
-        SendMessage messageSupport = new SendMessage();
-        messageSupport.setText(message);
-        messageSupport.setChatId(supportChatId);
-        messageSupport.enableHtml(true);
-        messageSupport.setReplyMarkup(inlineKeyboardMarkup);
-        execute(messageSupport);
+        sendInfoToSupportAdmins(message, inlineKeyboardMarkup);
     }
 
-    private void sendInfoToUser(String telegramId, String message) throws TelegramApiException {
-        SendMessage messageSupport = new SendMessage();
-        messageSupport.setText(message);
-        messageSupport.setChatId(telegramId);
-        messageSupport.enableHtml(true);
-        execute(messageSupport);
+    private void sendInfoToUser(String telegramId, String message, InlineKeyboardMarkup inlineKeyboardMarkup) throws TelegramApiException {
+        SendMessage messageForUser = new SendMessage();
+        messageForUser.setText(message);
+        messageForUser.setChatId(telegramId);
+        if (inlineKeyboardMarkup != null) messageForUser.setReplyMarkup(inlineKeyboardMarkup);
+        messageForUser.enableHtml(true);
+        execute(messageForUser);
     }
 
-    private void sendInfoToSupport(String message) throws TelegramApiException {
+    private void sendInfoToSupportAdmins(String message, InlineKeyboardMarkup inlineKeyboardMarkup) throws TelegramApiException {
         // отправляем всем админам чата
         getChatAdministartors(privateChannelId).forEach(user -> {
             try {
-                sendInfoToUser(String.valueOf(user.getUser().getId()), message);
+                sendInfoToUser(String.valueOf(user.getUser().getId()), message, inlineKeyboardMarkup);
             } catch (TelegramApiException e) {
                 e.printStackTrace();
             }
         });
+    }
+
+    private void sendDebugToOwner(String message) throws TelegramApiException {
+        sendInfoToUser(supportChatId, message, null);
     }
 
     private SendMessage getCommandResponse(String text, String user, String telegramUserId) throws TelegramApiException {
@@ -599,9 +598,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 banChatMember.setChatId(privateChannelId);
                 banChatMember.setUserId(Long.valueOf(userId));
                 execute(banChatMember);
-                sendInfoToSupport(String.format("""
+                sendInfoToSupportAdmins(String.format("""
                         <a href="tg://user?id=%s">Пользователь</a> был забанен <a href="tg://user?id=%s">админом</a>, он более не сможет подавать заявку через бота
-                        """, userId, telegramUserId));
+                        """, userId, telegramUserId), null);
                 Owner owner = ownerService.getUser(userId);
                 TempOwner tmpOwner = tempOwnerService.getUser(userId);
                 tempOwnerService.delete(tmpOwner);
@@ -609,7 +608,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 ownerService.delete(owner);
             } catch (TelegramApiException e) {
                 try {
-                    sendInfoToSupport("Ошибка при добавление пользователя в бан: " + e.getMessage());
+                    sendDebugToOwner("Ошибка при добавлении пользователя в бан: " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -632,16 +631,16 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     execute(unbanChatMember);
                 } catch (TelegramApiException e) {
                     try {
-                        sendInfoToSupport("Ошибка при удалении пользователя из бана: " + e.getMessage());
+                        sendDebugToOwner("Ошибка при удалении пользователя из бана: " + e.getMessage());
                     } catch (TelegramApiException ex) {
                         ex.printStackTrace();
                     }
                 }
-                sendInfoToUser(userId, """
+                sendInfoToUser(userId, String.format("""
                                             
-                        Вам выдан полный доступ, нажмите здесь
-                        ⬇️⬇️⬇️️ 
-                        """ + getChatInviteLink());
+                        Вам выдан полный доступ, нажмите ➡️➡️➡️<a href="%s">здесь</a>
+                                                
+                        """, getChatInviteLink()), null);
                 message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
                 TempOwner tempOwner = tempOwnerService.getUser(userId);
                 addOwnerToDb(tempOwner, telegramUserId);
@@ -666,7 +665,11 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
             messageSuccess.setText("🎉 Добро пожаловать в чат!");
             status = "Пользователь получил полный доступ автоматически";
-            sendInfoToUser(userId, "Вам выдан полный доступ, нажмите здесь➡️" + getChatInviteLink());
+            sendInfoToUser(userId, String.format("""
+                                
+                    Вам выдан полный доступ, нажмите ➡️➡️➡️<a href=\"%s\">здесь</a>
+                                
+                    """, getChatInviteLink()), null);
             // активирует запись бот, записываем его ID
             addOwnerToDb(tmpOwner, token.substring(0, token.indexOf(":")));
         } else {
@@ -755,8 +758,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
         List<InlineKeyboardButton> keyboardButtonsRow3 = new ArrayList<>();
         // если не в списке владельцев и не забанен в приватном чате, то добавляем кнопку регистрации
-        if (!ownerService.isUserExist(telegramUserId) && !getRole(telegramUserId).equals(Permission.BANNED))
-            keyboardButtonsRow3.add(inlineKeyboardButtonAccess);
+        if (!ownerService.isUserExist(telegramUserId))
+            if (getRole(telegramUserId).equals(Permission.BANNED)) {
+                InlineKeyboardButton bannedHomeButton = new InlineKeyboardButton();
+                bannedHomeButton.setText("Очень жаль, вы были забанены");
+                bannedHomeButton.setCallbackData(COMMANDS.START.getCommand());
+                keyboardButtonsRow3.add(bannedHomeButton);
+            } else
+                keyboardButtonsRow3.add(inlineKeyboardButtonAccess);
 
         keyboardButtons.add(keyboardButtonsRow1);
         keyboardButtons.add(keyboardButtonsRow2);
