@@ -35,7 +35,9 @@ dockerCompose {
 test {
     useJUnitPlatform()
 }
-
+springBoot {
+    buildInfo()
+}
 bootJar {
     archiveFileName = "bot.jar"
     from ".env"

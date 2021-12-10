@@ -7,7 +7,9 @@ import com.almirus.kvartalyBot.util.Permission;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.info.BuildProperties;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
@@ -37,6 +39,9 @@ import static java.util.stream.Collectors.joining;
 @Data
 @Slf4j
 public class TelegramBotHandler extends TelegramLongPollingBot {
+
+    @Autowired
+    BuildProperties buildProperties;
 
     private final String INFO_LABEL = "🤖 О боте";
     private final String ACCESS_LABEL = "🔐 Запросить доступ";
@@ -75,7 +80,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         CAR_NOT_EXIST("/car_not_exist"),
         BAN("/ban");
 
-        private String command;
+        private final String command;
 
         COMMANDS(String command) {
             this.command = command;
@@ -134,7 +139,6 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 Matcher matcherCar = patternCar.matcher(reply);
                 // введенный руками текст приходит не как ответ, а как обычный текст
                 Matcher matcherCustomPhone = patternCustomPhone.matcher(text);
-
                 if (matcherFloor.find()) {
                     sendFloorInfo(Integer.parseInt(text), String.valueOf(telegramUserId));
                     SendMessage message = handleAccessRoomCommand(String.valueOf(telegramUserId));
@@ -180,6 +184,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
+                    sendDebugToOwner("Error " + e.getMessage());
+                } catch (TelegramApiException ex) {
+                    ex.printStackTrace();
+                }
+            } catch (NumberFormatException e) {
+                try {
+                    // если ошибка начинаем сначала
+                    SendMessage message = handleAccessFloorCommand(String.valueOf(telegramUserId));
+                    execute(message);
                     sendDebugToOwner("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
@@ -308,7 +321,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     private void sendInfoToSupportAdmins(String message, InlineKeyboardMarkup inlineKeyboardMarkup) throws TelegramApiException {
         // отправляем всем админам чата
-        getChatAdministartors(privateChannelId).forEach(user -> {
+        getChatAdministrators(privateChannelId).forEach(user -> {
             try {
                 sendInfoToUser(String.valueOf(user.getUser().getId()), message, inlineKeyboardMarkup);
             } catch (TelegramApiException e) {
@@ -465,11 +478,12 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     private SendMessage handleInfoCommand() {
         SendMessage message = new SendMessage();
-        message.setText("""
+        message.setText(String.format("""
                 После авторизации вы сможете найти своих соседей по этажу и стояку, а также другую информацию, получить доступ к закрытому чату.
                 Функционал будет расширяться!
                 Вопросы, пожелания, донаты 🥯 @<a href="tg://user?id=153968771">Almirus</a>
-                """);
+                Версия от %s
+                """, buildProperties.getTime()));
         message.enableHtml(true);
         InlineKeyboardButton inlineKeyboardButtonBot = new InlineKeyboardButton();
         inlineKeyboardButtonBot.setText(BOT_LABEL);
@@ -640,7 +654,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 }
                 sendInfoToUser(userId, String.format("""
                                             
-                        Вам выдан полный доступ, нажмите ➡️➡️➡️<a href="%s">здесь</a>
+                        Вам выдан полный доступ, нажмите 
+                        ➡️➡️➡️<a href="%s">здесь</a>
                                                 
                         """, getChatInviteLink()), null);
                 message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
@@ -666,17 +681,18 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
         if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
             messageSuccess.setText("🎉 Добро пожаловать в чат!");
-            status = "Пользователь получил полный доступ автоматически";
+            status = "Пользователь получил полный доступ автоматически 💨️";
             sendInfoToUser(userId, String.format("""
                                 
-                    Вам выдан полный доступ, нажмите ➡️➡️➡️<a href=\"%s\">здесь</a>
+                    Вам выдан полный доступ, нажмите 
+                    ➡️➡️➡️<a href=\"%s\">здесь</a>
                                 
                     """, getChatInviteLink()), null);
             // активирует запись бот, записываем его ID
             addOwnerToDb(tmpOwner, token.substring(0, token.indexOf(":")));
         } else {
             messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
-            status = "Пользователь запросил полный доступ";
+            status = "Пользователь запросил полный доступ, введенные данные отличаются ⚠️от плана дома";
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
@@ -806,7 +822,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         };
     }
 
-    private List<ChatMember> getChatAdministartors(String chatId) throws TelegramApiException {
+    private List<ChatMember> getChatAdministrators(String chatId) throws TelegramApiException {
         GetChatAdministrators getChatAdministrators = new GetChatAdministrators();
         getChatAdministrators.setChatId(chatId);
         return execute(getChatAdministrators);
