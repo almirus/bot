@@ -29,8 +29,10 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import static java.util.stream.Collectors.joining;
 
@@ -52,6 +54,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String BEGIN_LABEL = "Начать";
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
+    private final String FIND_LABEL = "🔎 Найти соседей";
+    private final String FIND_NEIGHBOR2_LABEL = "2х ближайших";
+    private final String FIND_FLOOR_NEIGHBOR_LABEL = "На этаже";
+    private final String FIND_ENTRANCE_NEIGHBOR_LABEL = "По стояку";
     // todo весь текст перенести вверх в константы
 
     // временный владелец
@@ -78,7 +84,12 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         DELETE("/delete"),
         CAR_EXIST("/car_exist"),
         CAR_NOT_EXIST("/car_not_exist"),
-        BAN("/ban");
+        BAN("/ban"),
+        FIND_NEIGHBORS("/find_neighbors"),
+        FIND_2NEIGHBORS("/find_two_neighbors"),
+        FIND_FLOOR_NEIGHBORS("/find_floor_neighbors"),
+        FIND_ENTRANCE_NEIGHBORS("/find_entrance_neighbors");
+
 
         private final String command;
 
@@ -184,7 +195,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
-                    sendDebugToOwner("Error " + e.getMessage());
+                    sendDebugToSupport("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -193,7 +204,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     // если ошибка начинаем сначала
                     SendMessage message = handleAccessFloorCommand(String.valueOf(telegramUserId));
                     execute(message);
-                    sendDebugToOwner("Error " + e.getMessage());
+                    sendDebugToSupport("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -213,7 +224,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
                 try {
-                    sendDebugToOwner("Error " + e.getMessage());
+                    sendDebugToSupport("Error " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -284,7 +295,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     }
 
 
-    private void sendRequestToSupport(String message, String userId) throws TelegramApiException {
+    private void sendRequestToSupport(String message, String userId, boolean addFlag) throws TelegramApiException {
         InlineKeyboardButton inlineKeyboardButtonApprove = new InlineKeyboardButton();
         inlineKeyboardButtonApprove.setText("✅ Добавить");
         inlineKeyboardButtonApprove.setCallbackData(COMMANDS.ADD.getCommand() + "/" + userId);
@@ -300,7 +311,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
         List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
-        keyboardButtonsRow1.add(inlineKeyboardButtonApprove);
+        // нужна кнопка Добавить
+        if (addFlag) keyboardButtonsRow1.add(inlineKeyboardButtonApprove);
         keyboardButtonsRow1.add(inlineKeyboardButtonCancel);
         keyboardButtonsRow1.add(inlineKeyboardButtonBan);
 
@@ -330,7 +342,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         });
     }
 
-    private void sendDebugToOwner(String message) throws TelegramApiException {
+    private void sendDebugToSupport(String message) throws TelegramApiException {
         sendInfoToUser(supportChatId, message, null);
     }
 
@@ -383,6 +395,19 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
         if (text.equals(COMMANDS.BAN.getCommand())) {
             return handleAccessBanCommand(user, telegramUserId);
+        }
+        if (text.equals(COMMANDS.FIND_NEIGHBORS.getCommand())) {
+            return handleAccessFindNeighborsCommand(user, telegramUserId);
+        }
+
+        if (text.equals(COMMANDS.FIND_2NEIGHBORS.getCommand())) {
+            return handleAccessFind2NeighborsCommand(user, telegramUserId);
+        }
+        if (text.equals(COMMANDS.FIND_FLOOR_NEIGHBORS.getCommand())) {
+            return handleAccessFindFloorNeighborsCommand(user, telegramUserId);
+        }
+        if (text.equals(COMMANDS.FIND_ENTRANCE_NEIGHBORS.getCommand())) {
+            return handleAccessFindEntranceNeighborsCommand(user, telegramUserId);
         }
         return handleNotFoundCommand(telegramUserId);
     }
@@ -461,6 +486,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleBotCommand(String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
         message.setText("""
+                ✨ Бот может искать соседей
                 ✨ Бот умеет выдавать информацию о недвижимости
                 ✨ Первая версия бота
                 ✨ Привет человек
@@ -624,7 +650,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 ownerService.delete(owner);
             } catch (TelegramApiException e) {
                 try {
-                    sendDebugToOwner("Ошибка при добавлении пользователя в бан: " + e.getMessage());
+                    sendDebugToSupport("Ошибка при добавлении пользователя в бан: " + e.getMessage());
                 } catch (TelegramApiException ex) {
                     ex.printStackTrace();
                 }
@@ -647,7 +673,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     execute(unbanChatMember);
                 } catch (TelegramApiException e) {
                     try {
-                        sendDebugToOwner("Ошибка при удалении пользователя из бана: " + e.getMessage());
+                        sendDebugToSupport("Ошибка при удалении пользователя из бана: " + e.getMessage());
                     } catch (TelegramApiException ex) {
                         ex.printStackTrace();
                     }
@@ -677,11 +703,12 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 <a href="tg://user?id=%s">%s</a>
                 """, item.getTelegramId(), item.getName())).collect(joining(", ")) : "Пока нет";
         SendMessage messageSuccess = new SendMessage();
+        boolean addFlag = false;
         String status;
         // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
         if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
             messageSuccess.setText("🎉 Добро пожаловать в чат!");
-            status = "Пользователь получил полный доступ автоматически 💨️";
+            status = "Пользователь получил полный доступ ✅автоматически";
             sendInfoToUser(userId, String.format("""
                                 
                     Вам выдан полный доступ, нажмите 
@@ -693,18 +720,22 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         } else {
             messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
             status = "Пользователь запросил полный доступ, введенные данные отличаются ⚠️от плана дома";
+            addFlag = true;
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
         sendRequestToSupport(String.format("""
-                %s
-                Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
-                Были введены данные: Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
-                --------------------             
-                В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
-                Другие владельцы: %s
-                🌏 Это сообщение получили все админы приватного чата.
-                """, status, userId, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(), apartment.getDduNum(), owners), userId);
+                                %s
+                                Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
+                                Были введены данные: Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
+                                --------------------            
+                                В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
+                                Другие владельцы: %s
+                                🌏 Это сообщение получили все админы приватного чата.
+                                """, status, userId, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(),
+                        tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(),
+                        apartment.getDduNum(), owners),
+                userId, addFlag);
         return messageSuccess;
     }
 
@@ -745,6 +776,178 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         return message;
     }
 
+    private SendMessage handleAccessFindNeighborsCommand(String user, String telegramUserId) {
+        if (!ownerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+        SendMessage messageSuccess = new SendMessage();
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        messageSuccess.setText("Поиск соседей среди тех кто зарегистрирован через бота");
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+        InlineKeyboardButton inlineKeyboardNeighbor2Button = new InlineKeyboardButton();
+        inlineKeyboardNeighbor2Button.setText(FIND_NEIGHBOR2_LABEL);
+        inlineKeyboardNeighbor2Button.setCallbackData(COMMANDS.FIND_2NEIGHBORS.getCommand());
+
+        InlineKeyboardButton inlineKeyboardFloorButton = new InlineKeyboardButton();
+        inlineKeyboardFloorButton.setText(FIND_FLOOR_NEIGHBOR_LABEL);
+        inlineKeyboardFloorButton.setCallbackData(COMMANDS.FIND_FLOOR_NEIGHBORS.getCommand());
+
+        InlineKeyboardButton inlineKeyboardEntranceButtonAbout = new InlineKeyboardButton();
+        inlineKeyboardEntranceButtonAbout.setText(FIND_ENTRANCE_NEIGHBOR_LABEL);
+        inlineKeyboardEntranceButtonAbout.setCallbackData(COMMANDS.FIND_ENTRANCE_NEIGHBORS.getCommand());
+
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+
+        keyboardButtonsRow1.add(inlineKeyboardNeighbor2Button);
+        keyboardButtonsRow1.add(inlineKeyboardFloorButton);
+        keyboardButtonsRow1.add(inlineKeyboardEntranceButtonAbout);
+        keyboardButtons.add(keyboardButtonsRow1);
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        messageSuccess.setReplyMarkup(inlineKeyboardMarkup);
+        return messageSuccess;
+    }
+
+    private SendMessage handleAccessFind2NeighborsCommand(String user, String telegramUserId) {
+        if (!ownerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+        SendMessage messageSuccess = new SendMessage();
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        StringBuilder sb = new StringBuilder();
+        Owner owner = ownerService.getUser(telegramUserId);
+        List<Apartment> apartmentList = owner.getApartmentList();
+        apartmentList.forEach(ownerApartment -> {
+            sb.append("\nВаши соседи по квартире №").append(ownerApartment.getId());
+            // все квартиры в подъезде и на этаже
+            List<Apartment> floorApartList = apartmentService.getFloorApartments(ownerApartment.getFloor(), ownerApartment.getEntrance());
+            OptionalInt result = IntStream.range(0, floorApartList.size())
+                    .filter(x -> ownerApartment.getId().equals(floorApartList.get(x).getId()))
+                    .findFirst();
+            Apartment apartmentLeft = null;
+            Apartment apartmentRight = null;
+            if (result.isPresent()) {
+                int index = result.getAsInt();
+                try {
+                    apartmentLeft = floorApartList.get(index - 1);
+                    apartmentRight = floorApartList.get(index + 1);
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    e.printStackTrace();
+                }
+                if (apartmentLeft != null)
+                    sb.append("\nСоседа(ей) из квартиры №").append(apartmentLeft.getId()).append(" ").append(apartmentLeft.getOwnerList().size() > 0 ? " зарегистрирован " +
+                            apartmentLeft.getOwnerList().stream().map(neighbor ->
+                                    String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
+                            : " еще не зарегистрирован через бота.");
+                if (apartmentRight != null)
+                    sb.append("\nСоседа(ей) из квартиры №").append(apartmentRight.getId()).append(" ").append(apartmentRight.getOwnerList().size() > 0 ? " зарегистрирован " +
+                            apartmentRight.getOwnerList().stream().map(neighbor ->
+                                    String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
+                            : " еще не зарегистрирован через бота.");
+            } else {
+                try {
+                    sendDebugToSupport("запрошены соседи квартиры " + ownerApartment.getRoom() + ", но не найдены данные на этаже");
+                } catch (TelegramApiException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        messageSuccess.enableHtml(true);
+        messageSuccess.setText(sb.toString());
+        return messageSuccess;
+    }
+
+    private SendMessage handleAccessFindEntranceNeighborsCommand(String user, String telegramUserId) {
+        if (!ownerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+        SendMessage messageSuccess = new SendMessage();
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        StringBuilder sb = new StringBuilder();
+        Owner owner = ownerService.getUser(telegramUserId);
+        List<Apartment> apartmentList = owner.getApartmentList();
+        apartmentList.forEach(ownerApartment -> {
+            sb.append("\nВаши соседи по квартире №").append(ownerApartment.getId()).append(" и стояку");
+            List<Apartment> floorApartList = apartmentService.getFloorApartments(ownerApartment.getFloor(), ownerApartment.getEntrance());
+            // индекс квартиры на этаже
+            OptionalInt result = IntStream.range(0, floorApartList.size())
+                    .filter(x -> ownerApartment.getId().equals(floorApartList.get(x).getId()))
+                    .findFirst();
+            if (result.isPresent()) {
+                int index = result.getAsInt();
+                apartmentService.getEntranceFloors(ownerApartment.getEntrance()).forEach(floor -> {
+                    List<Apartment> floorApartmentList = apartmentService.getFloorApartments(floor, ownerApartment.getEntrance());
+                    try {
+                        Apartment apartment = floorApartmentList.get(index);
+                        if (ownerApartment.getFloor() != floor)
+                            sb.append("\nИз квартиры №").append(apartment.getId()).append(" и этажа ").append(floor).append(apartment.getOwnerList().size() > 0 ? " зарегистрирован " +
+                                    apartment.getOwnerList().stream().map(neighbor ->
+                                            String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
+                                    : " нет инф.");
+
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                        try {
+                            sendDebugToSupport("запрошены соседи квартиры " + ownerApartment.getRoom() + " и этажу " + ownerApartment.getFloor() + ", но не найдена квартира по индексу" + index);
+                        } catch (TelegramApiException ex) {
+                            ex.printStackTrace();
+                        }
+                        e.printStackTrace();
+                    }
+                });
+            } else {
+                try {
+                    sendDebugToSupport("запрошены соседи квартиры " + ownerApartment.getRoom() + " и этажу " + ownerApartment.getFloor() + ", но не найдены данные на этаже");
+                } catch (TelegramApiException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        messageSuccess.enableHtml(true);
+        messageSuccess.setText(sb.toString());
+        return messageSuccess;
+    }
+
+    private SendMessage handleAccessFindFloorNeighborsCommand(String user, String telegramUserId) {
+        if (!ownerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+        SendMessage messageSuccess = new SendMessage();
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        StringBuilder sb = new StringBuilder();
+        Owner owner = ownerService.getUser(telegramUserId);
+        List<Apartment> apartmentList = owner.getApartmentList();
+        apartmentList.forEach(ownerApartment -> {
+            sb.append("\nВаши соседи по квартире №").append(ownerApartment.getId()).append(" и этажу ").append(ownerApartment.getFloor());
+            // все квартиры в подъезде и на этаже
+            List<Apartment> floorApartList = apartmentService.getFloorApartments(ownerApartment.getFloor(), ownerApartment.getEntrance());
+            floorApartList.forEach(apartment -> {
+                        if (ownerApartment.getId() != apartment.getId())
+                            sb.append("\nСоседа(ей) из квартиры №").append(apartment.getId()).append(" ").append(apartment.getOwnerList().size() > 0 ? " зарегистрирован " +
+                                    apartment.getOwnerList().stream().map(neighbor ->
+                                            String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
+                                    : " еще не зарегистрирован через бота.");
+                    }
+            );
+        });
+        messageSuccess.enableHtml(true);
+        messageSuccess.setText(sb.toString());
+        return messageSuccess;
+    }
+
     private InlineKeyboardMarkup getDefaultKeyboard(String telegramUserId) throws TelegramApiException {
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
 
@@ -764,6 +967,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardButtonAccess.setText(ACCESS_LABEL);
         inlineKeyboardButtonAccess.setCallbackData(COMMANDS.ACCESS.getCommand());
 
+        InlineKeyboardButton inlineKeyboardButtonSearch = new InlineKeyboardButton();
+        inlineKeyboardButtonSearch.setText(FIND_LABEL);
+        inlineKeyboardButtonSearch.setCallbackData(COMMANDS.FIND_NEIGHBORS.getCommand());
+
         List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
 
         List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
@@ -775,6 +982,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         keyboardButtonsRow1.add(inlineKeyboardButtonAbout);
 
         List<InlineKeyboardButton> keyboardButtonsRow3 = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow4 = new ArrayList<>();
+
+
+        keyboardButtons.add(keyboardButtonsRow1);
+        keyboardButtons.add(keyboardButtonsRow2);
+        keyboardButtons.add(keyboardButtonsRow3);
+        keyboardButtons.add(keyboardButtonsRow4);
+
         // если не в списке владельцев и не забанен в приватном чате, то добавляем кнопку регистрации
         if (!ownerService.isUserExist(telegramUserId))
             if (getRole(telegramUserId).equals(Permission.BANNED)) {
@@ -782,12 +997,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 bannedHomeButton.setText("Очень жаль, вы были забанены");
                 bannedHomeButton.setCallbackData(COMMANDS.START.getCommand());
                 keyboardButtonsRow3.add(bannedHomeButton);
+
             } else
                 keyboardButtonsRow3.add(inlineKeyboardButtonAccess);
-
-        keyboardButtons.add(keyboardButtonsRow1);
-        keyboardButtons.add(keyboardButtonsRow2);
-        keyboardButtons.add(keyboardButtonsRow3);
+            // пользователь зарегистрирован
+        else {
+            keyboardButtonsRow4.add(inlineKeyboardButtonSearch);
+        }
 
         inlineKeyboardMarkup.setKeyboard(keyboardButtons);
 
