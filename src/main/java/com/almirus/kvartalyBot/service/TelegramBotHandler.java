@@ -275,6 +275,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             tmpOwner = new TempOwner();
             tmpOwner.setTelegramId(telegramUserId);
         }
+        // удаляем лишний +
+        if (!"".equals(phone) && phone.contains("+")) phone = phone.substring(1);
+        // заменяем 8 на 7
+        if (!"".equals(phone) && phone.charAt(0) == '8') phone = "7" + phone.substring(1);
         tmpOwner.setPhoneNum("+" + phone);
         tempOwnerService.add(tmpOwner);
     }
