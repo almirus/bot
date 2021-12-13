@@ -836,12 +836,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             Apartment apartmentRight = null;
             if (result.isPresent()) {
                 int index = result.getAsInt();
-                try {
-                    apartmentLeft = floorApartList.get(index - 1);
-                    apartmentRight = floorApartList.get(index + 1);
-                } catch (ArrayIndexOutOfBoundsException e) {
-                    e.printStackTrace();
-                }
+
+                if (index - 1 >= 0) apartmentLeft = floorApartList.get(index - 1);
+                if (index + 1 <= floorApartList.size() - 1) apartmentRight = floorApartList.get(index + 1);
+
                 if (apartmentLeft != null)
                     sb.append("\nСоседа(ей) из квартиры №").append(apartmentLeft.getId()).append(" ").append(apartmentLeft.getOwnerList().size() > 0 ? " зарегистрирован " +
                             apartmentLeft.getOwnerList().stream().map(neighbor ->
