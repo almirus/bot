@@ -26,10 +26,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.OptionalInt;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -681,7 +678,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 sendInfoToUser(userId, String.format("""
                                             
                         Вам выдан полный доступ, нажмите 
-                        ➡️➡️➡️<a href="%s">здесь</a>
+                        ➡️➡️➡️<a href="%s">здесь</a>⬅️⬅️⬅️
                                                 
                         """, getChatInviteLink()), null);
                 message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
@@ -719,11 +716,16 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             addOwnerToDb(tmpOwner, token.substring(0, token.indexOf(":")));
         } else {
             messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
-            status = "Пользователь запросил полный доступ, введенные данные отличаются ⚠️от плана дома";
+            status = "Пользователь запросил полный доступ, введенные данные отличаются ❗от плана дома❗";
             addFlag = true;
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
+
+        String phoneNum = Arrays.stream(tmpOwner.getPhoneNum().split("")).map(phoneChar -> {
+            if (Math.random() * 10 < 8) return phoneChar;
+            else return "*";
+        }).collect(joining());
         sendRequestToSupport(String.format("""
                                 %s
                                 Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
@@ -733,7 +735,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                                 Другие владельцы: %s
                                 🌏 Это сообщение получили все админы приватного чата.
                                 """, status, userId, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(),
-                        tmpOwner.getPhoneNum(), tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(),
+                        phoneNum, tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(),
                         apartment.getDduNum(), owners),
                 userId, addFlag);
         return messageSuccess;
