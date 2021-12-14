@@ -48,13 +48,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String ABOUT_ROOM_LABEL = "🏠 О квартире";
     private final String BOT_LABEL = "Чего нового";
     private final String START_LABEL = "🏡 В начало";
-    private final String BEGIN_LABEL = "Начать";
+    private final String BEGIN_LABEL = "Согласен✅, Начать ";
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
     private final String FIND_LABEL = "🔎 Найти соседей";
-    private final String FIND_NEIGHBOR2_LABEL = "2х ближайших";
-    private final String FIND_FLOOR_NEIGHBOR_LABEL = "На этаже";
-    private final String FIND_ENTRANCE_NEIGHBOR_LABEL = "По стояку";
+    private final String FIND_NEIGHBOR2_LABEL = "👨👩2х ближайших";
+    private final String FIND_FLOOR_NEIGHBOR_LABEL = "👨👩На этаже";
+    private final String FIND_ENTRANCE_NEIGHBOR_LABEL = "👨👩По стояку";
     // todo весь текст перенести вверх в константы
 
     // временный владелец
@@ -66,8 +66,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
 
     private enum COMMANDS {
-        ADD("/add"),
-        REMOVE("/remove"),
+        ADD_USER("/add"),
+        REMOVE_USER("/remove_user"),
+        BAN("/ban"),
+
         INFO("/info"),
         START("/start"),
         DEMO("/demo"),
@@ -81,7 +83,6 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         DELETE("/delete"),
         CAR_EXIST("/car_exist"),
         CAR_NOT_EXIST("/car_not_exist"),
-        BAN("/ban"),
         FIND_NEIGHBORS("/find_neighbors"),
         FIND_2NEIGHBORS("/find_two_neighbors"),
         FIND_FLOOR_NEIGHBORS("/find_floor_neighbors"),
@@ -299,11 +300,11 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private void sendRequestToSupport(String message, String userId, boolean addFlag) throws TelegramApiException {
         InlineKeyboardButton inlineKeyboardButtonApprove = new InlineKeyboardButton();
         inlineKeyboardButtonApprove.setText("✅ Добавить");
-        inlineKeyboardButtonApprove.setCallbackData(COMMANDS.ADD.getCommand() + "/" + userId);
+        inlineKeyboardButtonApprove.setCallbackData(COMMANDS.ADD_USER.getCommand() + "/" + userId);
 
         InlineKeyboardButton inlineKeyboardButtonCancel = new InlineKeyboardButton();
         inlineKeyboardButtonCancel.setText("🚫 Отказать");
-        inlineKeyboardButtonCancel.setCallbackData(COMMANDS.DELETE.getCommand() + "/" + userId);
+        inlineKeyboardButtonCancel.setCallbackData(COMMANDS.REMOVE_USER.getCommand() + "/" + userId);
 
         InlineKeyboardButton inlineKeyboardButtonBan = new InlineKeyboardButton();
         inlineKeyboardButtonBan.setText("👊 Забанить");
@@ -388,11 +389,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (text.equals(COMMANDS.CAR_EXIST.getCommand())) {
             return handleAccessCarCommand(telegramUserId);
         }
-        if (text.equals(COMMANDS.ADD.getCommand())) {
+        if (text.equals(COMMANDS.ADD_USER.getCommand())) {
             return handleAccessAddCommand(user, telegramUserId);
-        }
-        if (text.equals(COMMANDS.REMOVE.getCommand())) {
-            return handleAccessCarCommand(telegramUserId);
         }
         if (text.equals(COMMANDS.BAN.getCommand())) {
             return handleAccessBanCommand(user, telegramUserId);
@@ -759,7 +757,17 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     private SendMessage handleSuccessCommand(String userId) {
         SendMessage message = new SendMessage();
-        message.setText("Почти все готово");
+        TempOwner tmpOwner = tempOwnerService.getUser(userId);
+        message.setText(String.format("""
+                        Почти все готово. Вы ввели следующую информацию:
+                        
+                        Ваш аккаунт: <a href="tg://user?id=%s">%s</a>
+                        Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
+                        
+                        Если ошиблись, нажмите 🚫Отменить отправку и заполните анкету с самого начала.
+                        Если все правильно, нажмите ✅Отправить данные 
+                        """, userId, tmpOwner.getName(),
+                tmpOwner.getFloor(), tmpOwner.getId(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace()));
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
         inlineKeyboardButtonBegin.setText(SEND_TO_ADMIN_LABEL);
         inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand() + "/" + userId);
@@ -849,12 +857,12 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 if (index + 1 <= floorApartList.size() - 1) apartmentRight = floorApartList.get(index + 1);
 
                 if (apartmentLeft != null)
-                    sb.append("\nСоседа(ей) из квартиры №").append(apartmentLeft.getId()).append(" ").append(apartmentLeft.getOwnerList().size() > 0 ? " зарегистрирован " +
+                    sb.append("\nСосед(и) из квартиры №").append(apartmentLeft.getId()).append(" ").append(apartmentLeft.getOwnerList().size() > 0 ? " зарегистрирован " +
                             apartmentLeft.getOwnerList().stream().map(neighbor ->
                                     String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
                             : " еще не зарегистрирован через бота.");
                 if (apartmentRight != null)
-                    sb.append("\nСоседа(ей) из квартиры №").append(apartmentRight.getId()).append(" ").append(apartmentRight.getOwnerList().size() > 0 ? " зарегистрирован " +
+                    sb.append("\nСосед(и) из квартиры №").append(apartmentRight.getId()).append(" ").append(apartmentRight.getOwnerList().size() > 0 ? " зарегистрирован " +
                             apartmentRight.getOwnerList().stream().map(neighbor ->
                                     String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
                             : " еще не зарегистрирован через бота.");
@@ -1003,7 +1011,6 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 bannedHomeButton.setText("Очень жаль, вы были забанены");
                 bannedHomeButton.setCallbackData(COMMANDS.START.getCommand());
                 keyboardButtonsRow3.add(bannedHomeButton);
-
             } else
                 keyboardButtonsRow3.add(inlineKeyboardButtonAccess);
             // пользователь зарегистрирован
