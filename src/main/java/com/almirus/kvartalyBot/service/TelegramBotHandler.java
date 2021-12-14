@@ -730,11 +730,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
-
-        String phoneNum = Arrays.stream(tmpOwner.getPhoneNum().split("")).map(phoneChar -> {
-            if (Math.random() * 10 < 8) return phoneChar;
-            else return "*";
-        }).collect(joining());
+        //маскируем - конфиденциальность
+        String phoneNum = tmpOwner.getPhoneNum().replaceAll("^(.{5}).{5}(.*)$", "$1***$2");;
         sendRequestToSupport(String.format("""
                                 %s
                                 Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
