@@ -55,6 +55,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
     private final String FIND_LABEL = "🔎 Найти соседей";
+    private final String ABOUT_2119_LABEL = "Справочная 21/19";
     private final String FIND_NEIGHBOR2_LABEL = "👨👩2х ближайших";
     private final String FIND_FLOOR_NEIGHBOR_LABEL = "👨👩На этаже";
     private final String FIND_ENTRANCE_NEIGHBOR_LABEL = "👨👩По стояку";
@@ -1024,6 +1025,11 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardButtonSearch.setText(FIND_LABEL);
         inlineKeyboardButtonSearch.setCallbackData(COMMANDS.FIND_NEIGHBORS.getCommand());
 
+        InlineKeyboardButton inlineKeyboardButtonBot2119 = new InlineKeyboardButton();
+        inlineKeyboardButtonBot2119.setText(ABOUT_2119_LABEL);
+        inlineKeyboardButtonBot2119.setUrl("https://t.me/Info_2119_bot");
+
+
         List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
 
         List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
@@ -1036,12 +1042,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
         List<InlineKeyboardButton> keyboardButtonsRow3 = new ArrayList<>();
         List<InlineKeyboardButton> keyboardButtonsRow4 = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow5 = new ArrayList<>();
 
+        keyboardButtonsRow5.add(inlineKeyboardButtonBot2119);
 
         keyboardButtons.add(keyboardButtonsRow1);
         keyboardButtons.add(keyboardButtonsRow2);
         keyboardButtons.add(keyboardButtonsRow3);
         keyboardButtons.add(keyboardButtonsRow4);
+        keyboardButtons.add(keyboardButtonsRow5);
 
         // если не в списке владельцев и не забанен в приватном чате, то добавляем кнопку регистрации
         if (!ownerService.isUserExist(telegramUserId))
