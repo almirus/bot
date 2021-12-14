@@ -26,7 +26,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -348,7 +351,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         sendInfoToUser(supportChatId, message, null);
     }
 
-    private SendMessage getCommandResponse(String text, String user, String telegramUserId) throws TelegramApiException {
+    /***
+     *
+     * @param text - сообщение, возможно с кнопками
+     * @param userId - ид пользователя который "привязан к кнопке", идет после слэша - переменная commandPattern в {@link #onUpdateReceived(Update) onUpdateReceived}
+     * @param telegramUserId - ид пользователя который общается с ботом
+     * @return
+     * @throws TelegramApiException
+     */
+    private SendMessage getCommandResponse(String text, String userId, String telegramUserId) throws TelegramApiException {
 
         if (text.equals(COMMANDS.INFO.getCommand())) {
             return handleInfoCommand();
@@ -377,10 +388,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
 
         if (text.equals(COMMANDS.SEND.getCommand())) {
-            return handleSendToAdminCommand(user, telegramUserId);
+            return handleSendToAdminCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.DELETE.getCommand())) {
-            return handleDeleteDataCommand(user, telegramUserId);
+            return handleDeleteDataCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.CAR_NOT_EXIST.getCommand())) {
             sendCarPlaceInfo("Нет", String.valueOf(telegramUserId));
@@ -390,26 +401,26 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return handleAccessCarCommand(telegramUserId);
         }
         if (text.equals(COMMANDS.ADD_USER.getCommand())) {
-            return handleAccessAddCommand(user, telegramUserId);
+            return handleAccessAddCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.BAN.getCommand())) {
-            return handleAccessBanCommand(user, telegramUserId);
+            return handleAccessBanCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.FIND_NEIGHBORS.getCommand())) {
-            return handleAccessFindNeighborsCommand(user, telegramUserId);
+            return handleAccessFindNeighborsCommand(userId, telegramUserId);
         }
 
         if (text.equals(COMMANDS.FIND_2NEIGHBORS.getCommand())) {
-            return handleAccessFind2NeighborsCommand(user, telegramUserId);
+            return handleAccessFind2NeighborsCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.FIND_FLOOR_NEIGHBORS.getCommand())) {
-            return handleAccessFindFloorNeighborsCommand(user, telegramUserId);
+            return handleAccessFindFloorNeighborsCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.FIND_ENTRANCE_NEIGHBORS.getCommand())) {
-            return handleAccessFindEntranceNeighborsCommand(user, telegramUserId);
+            return handleAccessFindEntranceNeighborsCommand(userId, telegramUserId);
         }
         if (text.equals(COMMANDS.REMOVE_USER.getCommand())) {
-            return handleAccessRemoveUserCommand(user, telegramUserId);
+            return handleAccessRemoveUserCommand(userId, telegramUserId);
         }
         return handleNotFoundCommand(telegramUserId);
     }
@@ -717,7 +728,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             sendInfoToUser(userId, String.format("""
                                 
                     Вам выдан полный доступ, нажмите 
-                    ➡️➡️➡️<a href=\"%s\">здесь</a>
+                    ➡️➡️➡️<a href=\"%s\">здесь</a>⬅️⬅️⬅️
                                 
                     """, getChatInviteLink()), null);
             // активирует запись бот, записываем его ID
@@ -731,7 +742,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
         //маскируем - конфиденциальность
-        String phoneNum = tmpOwner.getPhoneNum().replaceAll("^(.{5}).{5}(.*)$", "$1***$2");;
+        String phoneNum = tmpOwner.getPhoneNum().replaceAll("^(.{5}).{5}(.*)$", "$1***$2");
+        ;
         sendRequestToSupport(String.format("""
                                 %s
                                 Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
@@ -936,21 +948,21 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         return messageSuccess;
     }
 
-    private SendMessage handleAccessRemoveUserCommand(String user, String telegramUserId) throws TelegramApiException {
-        if (!tempOwnerService.isUserExist(telegramUserId)) {
+    private SendMessage handleAccessRemoveUserCommand(String userId, String telegramUserId) throws TelegramApiException {
+        if (getRole(telegramUserId).equals(Permission.ADMIN) || getRole(telegramUserId).equals(Permission.OWNER)) {
+            TempOwner tmpOwner = tempOwnerService.getUser(userId);
+            tempOwnerService.delete(tmpOwner);
+            sendInfoToUser(userId, "Администратор посчитал, что вы указали неверные данные, проверьте номер квартиры, он мог <a href=\"https://2119.ru/upload/iblock/f28/%D0%A0%D0%B5%D0%B7%D1%83%D0%BB%D1%8C%D1%82%D0%B0%D1%82%D1%8B%20%D0%BE%D0%B1%D0%BC%D0%B5%D1%80%D0%BE%D0%B2_4%20%D0%BE%D1%87%D0%B5%D1%80%D0%B5%D0%B4%D1%8C.pdf\">измениться</a>. Нужно указывать почтовый номер квартиры. Запросите доступ снова.", null);
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("Пользователь был удален, ему отправлено сообщение с просьбой повторить регистрацию");
+            messageSuccess.setReplyMarkup(getDefaultKeyboard(userId));
+            return messageSuccess;
+        } else {
             SendMessage messageSuccess = new SendMessage();
             messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
-            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            messageSuccess.setChatId(String.valueOf(userId));
             return messageSuccess;
         }
-        TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
-        SendMessage messageSuccess = new SendMessage();
-        tempOwnerService.delete(tmpOwner);
-        messageSuccess.setText("Администратор посчитал, что вы указали неверные данные, проверьте номер квартиры, он мог <a href=\"https://2119.ru/upload/iblock/f28/%D0%A0%D0%B5%D0%B7%D1%83%D0%BB%D1%8C%D1%82%D0%B0%D1%82%D1%8B%20%D0%BE%D0%B1%D0%BC%D0%B5%D1%80%D0%BE%D0%B2_4%20%D0%BE%D1%87%D0%B5%D1%80%D0%B5%D0%B4%D1%8C.pdf\">измениться</a>. Нужно указывать почтовый номер квартиры. Запросите доступ снова.");
-        messageSuccess.setChatId(String.valueOf(telegramUserId));
-        messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
-        sendInfoToUser(telegramUserId, "Пользователь был удален, ему отправлено сообщение с просьбой повторить регистрацию", null);
-        return messageSuccess;
     }
 
     private SendMessage handleAccessFindFloorNeighborsCommand(String user, String telegramUserId) {
