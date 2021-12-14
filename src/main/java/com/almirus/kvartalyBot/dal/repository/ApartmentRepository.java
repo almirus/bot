@@ -10,6 +10,7 @@ import java.util.List;
 public interface ApartmentRepository extends CrudRepository<Apartment, Long>,
         JpaSpecificationExecutor<Apartment> {
     Apartment getApartmentById(Integer roomNum);
+    Apartment getApartmentByDduNum(Integer roomNum);
 
     @Query("select a from Apartment a where a.floor = ?1 and a.entrance = ?2 order by a.id")
     List<Apartment> getFloorApartments(Integer floor, Integer entrance);

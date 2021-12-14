@@ -408,6 +408,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (text.equals(COMMANDS.FIND_ENTRANCE_NEIGHBORS.getCommand())) {
             return handleAccessFindEntranceNeighborsCommand(user, telegramUserId);
         }
+        if (text.equals(COMMANDS.REMOVE_USER.getCommand())) {
+            return handleAccessRemoveUserCommand(user, telegramUserId);
+        }
         return handleNotFoundCommand(telegramUserId);
     }
 
@@ -700,12 +703,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleSendToAdminCommand(String userId, String telegramUserId) throws TelegramApiException {
         TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
         Apartment apartment = apartmentService.getApartment(tmpOwner.getRealNum());
+        Apartment apartmentDDU = apartmentService.getApartmentDDU(tmpOwner.getRealNum());
         String owners = apartment.getOwnerList().size() > 0 ? apartment.getOwnerList().stream().map(item -> String.format("""
                 <a href="tg://user?id=%s">%s</a>
                 """, item.getTelegramId(), item.getName())).collect(joining(", ")) : "Пока нет";
         SendMessage messageSuccess = new SendMessage();
         boolean addFlag = false;
-        String status;
+        String status, dduStr = "";
         // TODO здесь ветка автоапрува пользователя, если совпали его данные из базы квартиры
         if (tmpOwner.getFloor().equals(apartment.getFloor()) && tmpOwner.getRealNum().equals(apartment.getId())) {
             messageSuccess.setText("🎉 Добро пожаловать в чат!");
@@ -722,6 +726,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
             status = "Пользователь запросил полный доступ, введенные данные отличаются ❗от плана дома❗";
             addFlag = true;
+            dduStr = String.format("❓Проверка по квартире ДДУ: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s", apartmentDDU.getFloor(), apartmentDDU.getId(), apartmentDDU.getDduNum());
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
@@ -736,11 +741,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                                 Были введены данные: Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
                                 --------------------            
                                 В нашей базе по этой квартире: Этаж: %s Квартира: %s, Номер квартиры по ДДУ: %s
+                                %s
                                 Другие владельцы: %s
-                                🌏 Это сообщение получили все админы приватного чата.
+                                🌏 Это сообщение получили все админы приватного чата. Телефон замаскирован в целях конфиденциальности.
                                 """, status, userId, tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(),
-                        phoneNum, tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(),
-                        apartment.getDduNum(), owners),
+                        phoneNum, tmpOwner.getCarPlace(), apartment.getFloor(), apartment.getId(), apartment.getDduNum(),
+                        dduStr,
+                        owners),
                 userId, addFlag);
         return messageSuccess;
     }
@@ -760,14 +767,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         TempOwner tmpOwner = tempOwnerService.getUser(userId);
         message.setText(String.format("""
                         Почти все готово. Вы ввели следующую информацию:
-                        
+                                                
                         Ваш аккаунт: <a href="tg://user?id=%s">%s</a>
                         Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
-                        
+                                                
                         Если ошиблись, нажмите 🚫Отменить отправку и заполните анкету с самого начала.
                         Если все правильно, нажмите ✅Отправить данные 
                         """, userId, tmpOwner.getName(),
-                tmpOwner.getFloor(), tmpOwner.getId(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace()));
+                tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace()));
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
         inlineKeyboardButtonBegin.setText(SEND_TO_ADMIN_LABEL);
         inlineKeyboardButtonBegin.setCallbackData(COMMANDS.SEND.getCommand() + "/" + userId);
@@ -929,6 +936,23 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         });
         messageSuccess.enableHtml(true);
         messageSuccess.setText(sb.toString());
+        return messageSuccess;
+    }
+
+    private SendMessage handleAccessRemoveUserCommand(String user, String telegramUserId) throws TelegramApiException {
+        if (!tempOwnerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+        TempOwner tmpOwner = tempOwnerService.getUser(telegramUserId);
+        SendMessage messageSuccess = new SendMessage();
+        tempOwnerService.delete(tmpOwner);
+        messageSuccess.setText("Администратор посчитал, что вы указали неверные данные, проверьте номер квартиры, он мог <a href=\"https://2119.ru/upload/iblock/f28/%D0%A0%D0%B5%D0%B7%D1%83%D0%BB%D1%8C%D1%82%D0%B0%D1%82%D1%8B%20%D0%BE%D0%B1%D0%BC%D0%B5%D1%80%D0%BE%D0%B2_4%20%D0%BE%D1%87%D0%B5%D1%80%D0%B5%D0%B4%D1%8C.pdf\">измениться</a>. Нужно указывать почтовый номер квартиры. Запросите доступ снова.");
+        messageSuccess.setChatId(String.valueOf(telegramUserId));
+        messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
+        sendInfoToUser(telegramUserId, "Пользователь был удален, ему отправлено сообщение с просьбой повторить регистрацию", null);
         return messageSuccess;
     }
 

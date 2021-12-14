@@ -15,7 +15,9 @@ public class ApartmentService {
     public Apartment getApartment(Integer roomNum) {
         return apartmentRepository.getApartmentById(roomNum);
     }
-
+    public Apartment getApartmentDDU(Integer roomNum) {
+        return apartmentRepository.getApartmentByDduNum(roomNum);
+    }
     public List<Apartment> getFloorApartments(Integer floor, Integer entrance) {
         return apartmentRepository.getFloorApartments(floor, entrance);
     }
