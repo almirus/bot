@@ -623,7 +623,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardButtonCancel.setCallbackData(COMMANDS.PHONE_NOT_EXIST.getCommand());
 
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
-        inlineKeyboardButtonBegin.setText("📞 да");
+        inlineKeyboardButtonBegin.setText("✅️ да");
         inlineKeyboardButtonBegin.setCallbackData(COMMANDS.PHONE_EXIST.getCommand());
 
         InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
@@ -636,7 +636,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
         inlineKeyboardMarkup.setKeyboard(keyboardButtons);
 
-        return SendMessage.builder().text("телефон нужен для экстренной связи в случае ЧП, поделитесь им?").chatId(telegramUserId).replyMarkup(inlineKeyboardMarkup).build();
+        return SendMessage.builder().text("номер телефона нужен для экстренной связи в случае ЧП, поделитесь им?").chatId(telegramUserId).replyMarkup(inlineKeyboardMarkup).build();
 
     }
 
@@ -791,8 +791,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
         messageSuccess.setChatId(String.valueOf(telegramUserId));
         messageSuccess.setReplyMarkup(getDefaultKeyboard(telegramUserId));
-        //маскируем - конфиденциальность
-        String phoneNum = tmpOwner.getPhoneNum().replaceAll("^(.{5}).{5}(.*)$", "$1***$2");
+        String phoneNum;
+        if (!"".equals(tmpOwner.getPhoneNum())) {
+            //маскируем - конфиденциальность
+            phoneNum = tmpOwner.getPhoneNum().replaceAll("^(.{5}).{5}(.*)$", "$1***$2");
+        } else {
+            phoneNum = "не предоставлен";
+        }
+
         sendRequestToSupport(String.format("""
                                 %s
                                 Telegram аккаунт: <a href="tg://user?id=%s">%s</a>
