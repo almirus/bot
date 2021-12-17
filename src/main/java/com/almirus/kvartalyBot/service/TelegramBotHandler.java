@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.OptionalInt;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -51,7 +52,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String ABOUT_ROOM_LABEL = "🏠 О квартире";
     private final String BOT_LABEL = "Чего нового";
     private final String START_LABEL = "🏡 В начало";
-    private final String BEGIN_LABEL = "Согласен✅, Начать ";
+    private final String BEGIN_LABEL = "Согласен✅, начать ";
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
     private final String FIND_LABEL = "🔎 Найти соседей";
@@ -87,10 +88,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         DELETE("/delete"),
         CAR_EXIST("/car_exist"),
         CAR_NOT_EXIST("/car_not_exist"),
+        PHONE_EXIST("/phone_exist"),
+        PHONE_NOT_EXIST("/phone_not_exist"),
         FIND_NEIGHBORS("/find_neighbors"),
         FIND_2NEIGHBORS("/find_two_neighbors"),
         FIND_FLOOR_NEIGHBORS("/find_floor_neighbors"),
-        FIND_ENTRANCE_NEIGHBORS("/find_entrance_neighbors");
+        FIND_ENTRANCE_NEIGHBORS("/find_entrance_neighbors"),
+        WHO_IS("/whois");
 
 
         private final String command;
@@ -168,7 +172,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     execute(message);
                 } else if (matcherName.find()) {
                     sendNameInfo(!"".equals(text) ? text : update.getMessage().getFrom().getUserName(), String.valueOf(telegramUserId));
-                    SendMessage message = handleAccessPhoneCommand(String.valueOf(telegramUserId));
+                    SendMessage message = handleAccessPhoneExistCommand(String.valueOf(telegramUserId));
+                    //SendMessage message = handleAccessPhoneCommand(String.valueOf(telegramUserId));
                     message.enableHtml(true);
                     message.setParseMode(ParseMode.HTML);
                     message.setChatId(String.valueOf(telegramUserId));
@@ -280,11 +285,15 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             tmpOwner = new TempOwner();
             tmpOwner.setTelegramId(telegramUserId);
         }
-        // удаляем лишний +
-        if (!"".equals(phone) && phone.contains("+")) phone = phone.substring(1);
-        // заменяем 8 на 7
-        if (!"".equals(phone) && phone.charAt(0) == '8') phone = "7" + phone.substring(1);
-        tmpOwner.setPhoneNum("+" + phone);
+        if (!"".equals(phone)) {
+            // удаляем лишние
+            phone = phone.replaceAll("[^0-9]", "");
+            // заменяем 8 на 7
+            if (phone.charAt(0) == '8') phone = "7" + phone.substring(1);
+            tmpOwner.setPhoneNum("+" + phone);
+        } else {
+            tmpOwner.setPhoneNum("");
+        }
         tempOwnerService.add(tmpOwner);
     }
 
@@ -404,6 +413,13 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (text.equals(COMMANDS.CAR_EXIST.getCommand())) {
             return handleAccessCarCommand(telegramUserId);
         }
+        if (text.equals(COMMANDS.PHONE_NOT_EXIST.getCommand())) {
+            sendPhoneInfo("", String.valueOf(telegramUserId));
+            return handleAccessCarExistCommand(String.valueOf(telegramUserId));
+        }
+        if (text.equals(COMMANDS.PHONE_EXIST.getCommand())) {
+            return handleAccessPhoneCommand(telegramUserId);
+        }
         if (text.equals(COMMANDS.ADD_USER.getCommand())) {
             return handleAccessAddCommand(userId, telegramUserId);
         }
@@ -503,6 +519,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleBotCommand(String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
         message.setText("""
+                ✨ Добавлена ссылка на справочную по кварталу 21/19
                 ✨ Бот может искать соседей
                 ✨ Бот умеет выдавать информацию о недвижимости
                 ✨ Первая версия бота
@@ -560,13 +577,14 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return message;
         }
         message.setText("""
-                Далее укажите, пожалуйста, <b>номер этажа</b>, <b>квартиры</b>, Ваше <b>имя или никнейм</b>, Ваш <b>номер телефона</b>.
+                Далее укажите, пожалуйста, <b>номер этажа</b>, <b>квартиры</b> (почтовый), Ваше <b>имя или никнейм</b>, Ваш <b>номер телефона</b>.
                 Эти данные нужны, чтобы избавиться от спама, а также иметь возможность получить дополнительный функционал. Данные будут доступны только администратору.
                 После проверки предоставленных сведений, Вам придёт ссылка на закрытый чат дома 44/2.
                 <a href="http://563603-cd36585.tmweb.ru/privacy.pdf">Политика конфиденциальности</a>                           
-                ❗❗❗ На данный момент бот не поддерживает регистрацию владельцев нежилых помещений.
+                ❗ На данный момент бот не поддерживает регистрацию владельцев нежилых помещений.
                 """);
         message.enableHtml(true);
+        message.disableWebPagePreview();
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
         inlineKeyboardButtonBegin.setText(BEGIN_LABEL);
 
@@ -595,6 +613,30 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleAccessNameCommand(String telegramUserId) {
 
         return SendMessage.builder().text("имя").chatId(telegramUserId).replyMarkup(ForceReplyKeyboard.builder().forceReply(true).build()).build();
+
+    }
+
+    private SendMessage handleAccessPhoneExistCommand(String telegramUserId) {
+
+        InlineKeyboardButton inlineKeyboardButtonCancel = new InlineKeyboardButton();
+        inlineKeyboardButtonCancel.setText("🛑 нет");
+        inlineKeyboardButtonCancel.setCallbackData(COMMANDS.PHONE_NOT_EXIST.getCommand());
+
+        InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
+        inlineKeyboardButtonBegin.setText("📞 да");
+        inlineKeyboardButtonBegin.setCallbackData(COMMANDS.PHONE_EXIST.getCommand());
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+        keyboardButtonsRow1.add(inlineKeyboardButtonBegin);
+        keyboardButtonsRow1.add(inlineKeyboardButtonCancel);
+
+        keyboardButtons.add(keyboardButtonsRow1);
+
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+
+        return SendMessage.builder().text("телефон нужен для экстренной связи в случае ЧП, поделитесь им?").chatId(telegramUserId).replyMarkup(inlineKeyboardMarkup).build();
 
     }
 
@@ -700,7 +742,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 sendInfoToUser(userId, String.format("""
                                             
                         Вам выдан полный доступ, нажмите 
-                        ➡️➡️➡️<a href="%s">здесь</a>⬅️⬅️⬅️
+                        ➡️➡️➡️<a href="%s">ЗДЕСЬ</a>⬅️⬅️⬅️
                                                 
                         """, getChatInviteLink()), null);
                 message.setText(String.format("Выдан полный доступ для <a href=\"tg://user?id=%s\">пользователя</a>", userId));
@@ -732,13 +774,16 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             sendInfoToUser(userId, String.format("""
                                 
                     Вам выдан полный доступ, нажмите 
-                    ➡️➡️➡️<a href=\"%s\">здесь</a>⬅️⬅️⬅️
+                    ➡️➡️➡️<a href=\"%s\">ЗДЕСЬ</a>⬅️⬅️⬅️
                                 
                     """, getChatInviteLink()), null);
             // активирует запись бот, записываем его ID
             addOwnerToDb(tmpOwner, token.substring(0, token.indexOf(":")));
         } else {
-            messageSuccess.setText("🎉 Ваши данные получены. Идет проверка...");
+            messageSuccess.setText("""
+                    🎉 Ваши данные получены. Идет проверка...
+                    Слишком долго? Напишите совету дома.
+                    """);
             status = "Пользователь запросил полный доступ, введенные данные отличаются ❗от плана дома❗";
             addFlag = true;
             dduStr = String.format("❓Проверка по квартире ДДУ: Подъезд: %s, Этаж: %s Квартира: %s, Номер квартиры по ДДУ: <b>%s</b>",
@@ -759,8 +804,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                                 🌏 Это сообщение получили все админы приватного чата. Телефон замаскирован в целях конфиденциальности.
                                 """,
                         status,
-                        userId,
-                        tmpOwner.getName(), tmpOwner.getFloor(), tmpOwner.getRealNum(), phoneNum, tmpOwner.getCarPlace(),
+                        userId, tmpOwner.getName(),
+                        tmpOwner.getFloor(), tmpOwner.getRealNum(), phoneNum, tmpOwner.getCarPlace(),
                         apartment.getEntrance(), apartment.getFloor(), apartment.getId(), apartment.getDduNum(),
                         dduStr,
                         owners),
@@ -787,8 +832,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                         Ваш аккаунт: <a href="tg://user?id=%s">%s</a>
                         Этаж: %s Квартира: %s Телефон: %s Машиноместо: %s
                                                 
-                        Если ошиблись, нажмите 🚫Отменить отправку и заполните анкету с самого начала.
-                        Если все правильно, нажмите ✅Отправить данные 
+                        Если ошиблись, нажмите 
+                        🚫Отменить отправку и заполните анкету с самого начала.
+                        Если все правильно, нажмите 
+                        ✅Отправить данные 
                         """, userId, tmpOwner.getName(),
                 tmpOwner.getFloor(), tmpOwner.getRealNum(), tmpOwner.getPhoneNum(), tmpOwner.getCarPlace()));
         InlineKeyboardButton inlineKeyboardButtonBegin = new InlineKeyboardButton();
@@ -932,7 +979,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                                     apartment.getOwnerList().stream().map(neighbor ->
                                             String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(", "))
                                     : " нет инф.");
-
+                        else {
+                            sb.append("\nВаша квартира №").append(ownerApartment.getId()).append(" на этаже ").append(ownerApartment.getFloor());
+                        }
                     } catch (ArrayIndexOutOfBoundsException e) {
                         try {
                             sendDebugToSupport("запрошены соседи квартиры " + ownerApartment.getRoom() + " и этажу " + ownerApartment.getFloor() + ", но не найдена квартира по индексу" + index);
@@ -990,7 +1039,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             List<Apartment> floorApartList = apartmentService.getFloorApartments(ownerApartment.getFloor(), ownerApartment.getEntrance());
             floorApartList.forEach(apartment -> {
                         if (ownerApartment.getId() != apartment.getId())
-                            sb.append("\nСосед(и) из квартиры №").append(apartment.getId()).append(" ").append(apartment.getOwnerList().size() > 0 ? " зарегистрирован " +
+                            sb.append("\nСосед(и) из квартиры №").append(apartment.getId()).append(" ").append(apartment.getOwnerList().size() > 0 ? " зарегистрирован(ы) " +
                                     apartment.getOwnerList().stream().map(neighbor ->
                                             String.format("<a href=\"tg://user?id=%s\">%s</a>", neighbor.getTelegramId(), neighbor.getName())).collect(joining(","))
                                     : " еще не зарегистрирован(ы) через бота.");
@@ -1099,9 +1148,18 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         };
     }
 
+    /***
+     * возвращает список админов чата, за исключением ботов-админов
+     * @param chatId
+     * @return
+     * @throws TelegramApiException
+     */
     private List<ChatMember> getChatAdministrators(String chatId) throws TelegramApiException {
         GetChatAdministrators getChatAdministrators = new GetChatAdministrators();
         getChatAdministrators.setChatId(chatId);
-        return execute(getChatAdministrators);
+        List<ChatMember> admins = execute(getChatAdministrators);
+        Predicate<ChatMember> isQualified = item -> item.getUser().getIsBot();
+        admins.removeIf(isQualified);
+        return admins;
     }
 }

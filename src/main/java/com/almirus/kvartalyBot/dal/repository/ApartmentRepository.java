@@ -18,6 +18,6 @@ public interface ApartmentRepository extends CrudRepository<Apartment, Long>,
     @Query("select a from Apartment a where a.entrance = ?1 order by a.id")
     List<Apartment> getEntranceApartments(Integer entrance);
 
-    @Query("select distinct a.floor from Apartment a where a.entrance = ?1 order by a.floor")
+    @Query("select distinct a.floor from Apartment a where a.entrance = ?1 order by a.floor DESC")
     List<Integer> getEntranceFloors(Integer entrance);
 }
