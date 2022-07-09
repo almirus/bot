@@ -84,3 +84,19 @@ create unique index tmp_owner_id_uindex
     on tmp_owner (id);
 
 alter sequence tmp_owner_id_seq owned by tmp_owner.id;
+
+create table debt
+(
+    apartment_or_car_place integer,
+    actual_date            date,
+    sum                    varchar,
+    alerted                boolean,
+    debt_id                bigserial,
+    debt_type              integer
+);
+
+comment on table debt is 'долги';
+
+alter table debt
+    owner to postgres;
+
