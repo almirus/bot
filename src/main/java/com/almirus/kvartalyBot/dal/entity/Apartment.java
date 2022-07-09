@@ -7,7 +7,7 @@ import java.util.List;
 
 @Entity
 @Data
-@Table(name = "apartment", schema = "public")
+@Table(name = "apartment")
 //таблица от застройщика с номерами всех квартир
 public class Apartment {
     @Id
@@ -42,9 +42,13 @@ public class Apartment {
     @Column(name = "difference")
     private Float difference;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(name="apartment_owner",
+    @ManyToMany
+    @JoinTable(name = "apartment_owner",
             joinColumns = @JoinColumn(name = "apartment_real_num"),
             inverseJoinColumns = @JoinColumn(name = "owner_id"))
     private List<Owner> ownerList = new java.util.ArrayList<>();
+
+    @OneToMany
+    @JoinColumn(name = "apartment_or_car_place")
+    private List<Debt> debtorList = new java.util.ArrayList<>();
 }

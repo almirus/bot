@@ -8,7 +8,7 @@ import java.util.List;
 
 @Entity
 @Data
-@Table(name = "owner", schema = "public")
+@Table(name = "owner")
 //таблица с владельцами, зарегистрированными
 public class Owner implements Serializable {
     @Id
@@ -24,7 +24,7 @@ public class Owner implements Serializable {
     @Column(name = "telegram_id")
     private String telegramId;
 
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany
     @JoinTable(name="apartment_owner",
     joinColumns = @JoinColumn(name = "owner_id"),
     inverseJoinColumns = @JoinColumn(name = "apartment_real_num"))

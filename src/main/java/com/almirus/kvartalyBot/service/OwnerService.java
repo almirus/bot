@@ -6,6 +6,8 @@ import com.almirus.kvartalyBot.dal.repository.OwnerRepository;
 import lombok.Data;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 
 @Service
 @Data
@@ -30,5 +32,9 @@ public class OwnerService {
     public Owner delete(Owner owner) {
         userRepository.delete(owner);
         return owner;
+    }
+
+    public List<Owner> findByCarPlace(Integer objectNum) {
+        return userRepository.findByCarPlace(objectNum.toString());
     }
 }

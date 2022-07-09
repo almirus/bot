@@ -1,6 +1,7 @@
 package com.almirus.kvartalyBot.service;
 
 import com.almirus.kvartalyBot.dal.entity.Apartment;
+import com.almirus.kvartalyBot.dal.entity.Debt;
 import com.almirus.kvartalyBot.dal.entity.Owner;
 import com.almirus.kvartalyBot.dal.entity.TempOwner;
 import com.almirus.kvartalyBot.util.Permission;
@@ -56,6 +57,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
     private final String FIND_LABEL = "🔎 Найти соседей";
+
+    private final String ADMIN_LABEL = "\uD83D\uDEE1 Для администраторов";
+    private final String DEBTOR_LABEL = "📨 Разослать сообщения должникам";
     private final String ABOUT_2119_LABEL = "Справочная 21/19";
     private final String FIND_NEIGHBOR2_LABEL = "👨👩2х ближайших";
     private final String FIND_FLOOR_NEIGHBOR_LABEL = "👨👩На этаже";
@@ -69,6 +73,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
     private final ApartmentService apartmentService;
 
+    private final DebtService debtService;
 
     private enum COMMANDS {
         ADD_USER("/add"),
@@ -94,8 +99,9 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         FIND_2NEIGHBORS("/find_two_neighbors"),
         FIND_FLOOR_NEIGHBORS("/find_floor_neighbors"),
         FIND_ENTRANCE_NEIGHBORS("/find_entrance_neighbors"),
-        WHO_IS("/whois");
-
+        WHO_IS("/whois"),
+        ADMIN("/admin"),
+        SEND_DEBTOR_MESSAGE("/debtor");
 
         private final String command;
 
@@ -442,6 +448,12 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (text.equals(COMMANDS.REMOVE_USER.getCommand())) {
             return handleAccessRemoveUserCommand(userId, telegramUserId);
         }
+        if (text.equals(COMMANDS.ADMIN.getCommand())) {
+            return handleAccessAdmin(userId, telegramUserId);
+        }
+        if (text.equals(COMMANDS.SEND_DEBTOR_MESSAGE.getCommand())) {
+            return handleAccessSendDebtMessage(userId, telegramUserId);
+        }
         return handleNotFoundCommand(telegramUserId);
     }
 
@@ -472,12 +484,27 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                     """, user.getName(), user.getPhoneNum(), user.getPhoneNum());
 
             String apartStr = user.getApartmentList().stream().map(item -> String.format("""
-                    Номер подъезда: <b>%s</b>
-                    Номер этажа: <b>%s</b>
-                    Номер квартиры: <b>%s</b>, по ДДУ: <b>%s</b>
-                    Комнат: <b>%s</b>
-                    Площадь по БТИ: <b>%s</b>, разница с договором: <b>%sм2</b>
-                    """, item.getEntrance(), item.getFloor(), item.getId(), item.getDduNum(), item.getRoom(), item.getRealArea(), item.getDifference())).collect(joining("\n"));
+                                    Номер подъезда: <b>%s</b>
+                                    Номер этажа: <b>%s</b>
+                                    Номер квартиры: <b>%s</b>, по ДДУ: <b>%s</b>
+                                    Комнат: <b>%s</b>
+                                    Площадь по БТИ: <b>%s</b>, разница с договором: <b>%sм2</b>
+                                    %s
+                                    """,
+                            item.getEntrance(),
+                            item.getFloor(),
+                            item.getId(),
+                            item.getDduNum(),
+                            item.getRoom(),
+                            item.getRealArea(),
+                            item.getDifference(),
+                            item.getDebtorList().stream().map(debt -> String.format("""
+                                    ⚠️Долг в размере: <b>%s</b>
+                                    ⚠️От: <b>%s</b>
+                                    """, debt.getSum(), debt.getActualDate()
+                            )).collect(joining("\n"))
+                    )
+            ).collect(joining("\n"));
 
             message.setText(userStr + apartStr);
 
@@ -519,6 +546,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleBotCommand(String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
         message.setText("""
+                ✨ Бот умеет рассылать задолженность
                 ✨ Добавлена ссылка на справочную по кварталу 21/19
                 ✨ Бот может искать соседей
                 ✨ Бот умеет выдавать информацию о недвижимости
@@ -719,6 +747,93 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
         message.setText("⚠⚠⚠ ️Мы были вынуждены вас забанить! Очень жаль.");
         return message;
+    }
+
+    private SendMessage handleAccessAdmin(String userId, String telegramUserId) throws TelegramApiException {
+
+        if (getRole(telegramUserId).equals(Permission.ADMIN) || getRole(telegramUserId).equals(Permission.OWNER)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            messageSuccess.setText("Администрирование");
+            InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+            InlineKeyboardButton inlineKeyboardDebtorButton = new InlineKeyboardButton();
+            inlineKeyboardDebtorButton.setText(DEBTOR_LABEL);
+            inlineKeyboardDebtorButton.setCallbackData(COMMANDS.SEND_DEBTOR_MESSAGE.getCommand());
+
+            List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+            List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+            keyboardButtonsRow1.add(inlineKeyboardDebtorButton);
+
+            keyboardButtons.add(keyboardButtonsRow1);
+            inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+            messageSuccess.setReplyMarkup(inlineKeyboardMarkup);
+            return messageSuccess;
+        } else {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+
+    }
+
+    private SendMessage handleAccessSendDebtMessage(String userId, String telegramUserId) throws TelegramApiException {
+
+        if (getRole(telegramUserId).equals(Permission.ADMIN) || getRole(telegramUserId).equals(Permission.OWNER)) {
+            List<Debt> debtList = debtService.getDebtList();
+            if (debtList.size() > 0) {
+                debtList.forEach(debt -> {
+                    List<Owner> ownerList;
+                    if (debt.getDebt_type() == 1) {
+                        ownerList = apartmentService.getApartment(debt.getObjectNum()).getOwnerList();
+                    } else {
+                        ownerList = ownerService.findByCarPlace(debt.getObjectNum());
+                    }
+                    ownerList.forEach(owner -> {
+                        try {
+                            sendInfoToUser(owner.getTelegramId(), String.format("""
+                                    Добрый день!
+                                    Уважаемый собственник %s %s (на дату %s), от УК поступила информация о наличии задолженности по оплате коммунальных услуг в размере 💰 %s₽.
+                                                                        
+                                    Контакты для связи с УК по всем вопросам начисления и оплаты услуг
+                                    ☎ <a href="tel:+74952049001">+7(495)-204-90-01</a>.
+                                    🔎 <a href="https://yandex.ru/maps/-/CCUNFCU~2C">2-й Грайвороновский проезд, д.38к1</a>, вход с торца дома возле п.1
+                                                                        
+                                    Также напоминаем, что при наличии права на льготы/ субсидии, вы можете предоставить необходимые подтверждающие документы и сократить тем самым размер начислений.
+                                    Если уведомление пришло по вашему ошибочно, просьба уточнить информацию в УК.
+                                    С уважением, Совет дома
+                                    """, debt.getDebt_type() == 1 ? "квартиры" : "машиноместа", debt.getObjectNum(), debt.getActualDate(), debt.getSum()), null);
+                        } catch (TelegramApiException e) {
+                            try {
+                                sendDebugToSupport("Не смог отправить сообщение владельцу квартиры " + debt.getObjectNum());
+                            } catch (TelegramApiException ex) {
+
+                            }
+                        }
+                        debt.setAlerted(true);
+                        debtService.save(debt);
+                    });
+
+                });
+                SendMessage messageSuccess = new SendMessage();
+                messageSuccess.setChatId(String.valueOf(telegramUserId));
+                messageSuccess.setText("Уведомления высланы должникам");
+                return messageSuccess;
+            } else {
+                SendMessage messageSuccess = new SendMessage();
+                messageSuccess.setChatId(String.valueOf(telegramUserId));
+                messageSuccess.setText("Список должников пуст");
+                return messageSuccess;
+            }
+
+        } else {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+
     }
 
     private SendMessage handleAccessAddCommand(String userId, String telegramUserId) throws TelegramApiException {
@@ -1080,6 +1195,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardButtonSearch.setText(FIND_LABEL);
         inlineKeyboardButtonSearch.setCallbackData(COMMANDS.FIND_NEIGHBORS.getCommand());
 
+        InlineKeyboardButton inlineKeyboardButtonAdmin = new InlineKeyboardButton();
+        inlineKeyboardButtonAdmin.setText(ADMIN_LABEL);
+        inlineKeyboardButtonAdmin.setCallbackData(COMMANDS.ADMIN.getCommand());
+
         InlineKeyboardButton inlineKeyboardButtonBot2119 = new InlineKeyboardButton();
         inlineKeyboardButtonBot2119.setText(ABOUT_2119_LABEL);
         inlineKeyboardButtonBot2119.setUrl("https://t.me/Info_2119_bot");
@@ -1095,17 +1214,21 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         List<InlineKeyboardButton> keyboardButtonsRow2 = new ArrayList<>();
         keyboardButtonsRow1.add(inlineKeyboardButtonAbout);
 
+
         List<InlineKeyboardButton> keyboardButtonsRow3 = new ArrayList<>();
         List<InlineKeyboardButton> keyboardButtonsRow4 = new ArrayList<>();
         List<InlineKeyboardButton> keyboardButtonsRow5 = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow6 = new ArrayList<>();
 
-        keyboardButtonsRow5.add(inlineKeyboardButtonBot2119);
+        keyboardButtonsRow5.add(inlineKeyboardButtonAdmin);
+        keyboardButtonsRow6.add(inlineKeyboardButtonBot2119);
 
         keyboardButtons.add(keyboardButtonsRow1);
         keyboardButtons.add(keyboardButtonsRow2);
         keyboardButtons.add(keyboardButtonsRow3);
         keyboardButtons.add(keyboardButtonsRow4);
         keyboardButtons.add(keyboardButtonsRow5);
+        keyboardButtons.add(keyboardButtonsRow6);
 
         // если не в списке владельцев и не забанен в приватном чате, то добавляем кнопку регистрации
         if (!ownerService.isUserExist(telegramUserId))

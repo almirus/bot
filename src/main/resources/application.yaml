@@ -1,6 +1,3 @@
-server:
-  servlet:
-    context-path: /api
 #logging:
 #  level:
 #    ROOT: DEBUG
@@ -14,13 +11,14 @@ spring:
     properties:
       hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
       hibernate.globally_quoted_identifiers: true
+      hibernate.enable_lazy_load_no_trans: true
 telegram:
   name: ${BOT_NAME}
-# @BotFather
+  # @BotFather
   token: ${BOT_TOKEN}
-# открытие для меня - к ID чата нужно добавлять 100
-# https://github.com/GabrielRF/telegram-id#web-group-id
-  chanel-id:  ${PRIVATE_CHANNEL}
+  # открытие для меня - к ID чата нужно добавлять 100
+  # https://github.com/GabrielRF/telegram-id#web-group-id
+  chanel-id: ${PRIVATE_CHANNEL}
   support:
-# @getidsbot - get admin id
+    # @getidsbot - get admin id
     chat-id: ${SUPPORT_ID}

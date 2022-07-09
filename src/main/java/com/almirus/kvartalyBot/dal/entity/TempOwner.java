@@ -8,7 +8,7 @@ import java.util.List;
 
 @Entity
 @Data
-@Table(name = "tmp_owner", schema = "public")
+@Table(name = "tmp_owner")
 //временная таблица, хранят пользователей которые или не завершили ввод всех данных или не активировали
 public class TempOwner implements Serializable {
     @Id
