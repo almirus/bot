@@ -29,4 +29,8 @@ public class ApartmentService {
     public List<Integer> getEntranceFloors(Integer entrance){
         return apartmentRepository.getEntranceFloors(entrance);
     }
+
+    public List<Apartment> getAllApartment(){
+        return apartmentRepository.findAll();
+    }
 }

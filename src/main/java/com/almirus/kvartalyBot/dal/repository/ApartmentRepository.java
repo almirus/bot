@@ -20,4 +20,6 @@ public interface ApartmentRepository extends CrudRepository<Apartment, Long>,
 
     @Query("select distinct a.floor from Apartment a where a.entrance = ?1 order by a.floor DESC")
     List<Integer> getEntranceFloors(Integer entrance);
+
+    List<Apartment> findAll();
 }

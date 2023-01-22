@@ -22,3 +22,5 @@ telegram:
   support:
     # @getidsbot - get admin id
     chat-id: ${SUPPORT_ID}
+server:
+  port: ${WEB_IN_PORT}

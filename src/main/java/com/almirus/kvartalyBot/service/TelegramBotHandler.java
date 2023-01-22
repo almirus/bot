@@ -27,10 +27,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.OptionalInt;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -57,6 +54,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final String SEND_TO_ADMIN_LABEL = "✅ Отправить данные";
     private final String SEND_TO_ADMIN_CANCEL_LABEL = "🚫 Отменить отправку";
     private final String FIND_LABEL = "🔎 Найти соседей";
+    private final String STATE_OF_EMERGENCY_LABEL = "\uD83D\uDEA8 Сообщить о ЧП";
 
     private final String ADMIN_LABEL = "\uD83D\uDEE1 Для администраторов";
     private final String DEBTOR_LABEL = "📨 Разослать сообщения должникам";
@@ -74,6 +72,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private final ApartmentService apartmentService;
 
     private final DebtService debtService;
+
+    private final LogService logService;
 
     private enum COMMANDS {
         ADD_USER("/add"),
@@ -101,7 +101,30 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         FIND_ENTRANCE_NEIGHBORS("/find_entrance_neighbors"),
         WHO_IS("/whois"),
         ADMIN("/admin"),
-        SEND_DEBTOR_MESSAGE("/debtor");
+        SEND_DEBTOR_MESSAGE("/debtor"),
+        SEND_EMERGENCY_MESSAGE("/alert"),
+        FIRE("/alert_fire"),
+        SMOKE("/alert_smoke"),
+        LEAK("/alert_leak"),
+        NOISE("/alert_noise"),
+        OTHER("/alert_other"),
+        FIRE_ENTRANCE("/alert_fire_entrance"),
+        FIRE_FLOOR("/alert_fire_floor"),
+        FIRE_HOME("/alert_fire_home"),
+        SMOKE_ENTRANCE("/alert_smoke_entrance"),
+        SMOKE_FLOOR("/alert_smoke_floor"),
+        SMOKE_HOME("/alert_smoke_home"),
+        LEAK_ENTRANCE("/alert_leak_entrance"),
+        LEAK_FLOOR("/alert_leak_floor"),
+        LEAK_HOME("/alert_leak_home"),
+        FIRE_SEND("/alert_fire_send"),
+        FIRE_CANCEL("/alert_fire_cancel"),
+        LEAK_SEND("/alert_leak_send"),
+        LEAK_CANCEL("/alert_leak_cancel"),
+        SMOKE_SEND("/alert_smoke_send"),
+        SMOKE_CANCEL("/alert_smoke_cancel"),
+        OTHER_SEND("/alert_other_send"),
+        OTHER_CANCEL("/alert_other_cancel");
 
         private final String command;
 
@@ -114,6 +137,18 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         }
     }
 
+    static final Map<String, String> EMERGENCY_TYPE = Map.of(
+            "fire", "о пожаре \uD83D\uDD25",
+            "leak", "о протечке \uD83D\uDCA6",
+            "smoke", "о задымление \uD83C\uDF2B️",
+            "noise", "о шуме \uD83D\uDD0A",
+            "other", "о находке \uD83D\uDD11"
+    );
+    static final Map<String, String> EMERGENCY_COVERAGE = Map.of(
+            "floor", "по этажу",
+            "entrance", "по подъезду",
+            "home", "по дому"
+    );
     @Value("${telegram.support.chat-id}")
     private String supportChatId;
 
@@ -225,7 +260,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         } else if (update.hasCallbackQuery() && !update.getCallbackQuery().getMessage().getChatId().equals(Long.parseLong(privateChannelId))) {
             // в этой ветке обрабатываются нажатия на кнопки, содержащие CallbackQuery
             try {
-                Pattern commandPattern = Pattern.compile("(/[a-z_]+)/?(\\d+)?");
+                Pattern commandPattern = Pattern.compile("(/[a-z_0-9]+)/?(\\d+)?");
                 Matcher matcherCommand = commandPattern.matcher(update.getCallbackQuery().getData());
                 if (matcherCommand.find()) {
                     SendMessage message = getCommandResponse(matcherCommand.group(1), matcherCommand.group(2), String.valueOf(update.getCallbackQuery().getMessage().getChatId()));
@@ -454,6 +489,25 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         if (text.equals(COMMANDS.SEND_DEBTOR_MESSAGE.getCommand())) {
             return handleAccessSendDebtMessage(userId, telegramUserId);
         }
+        if (text.equals(COMMANDS.SEND_EMERGENCY_MESSAGE.getCommand())) {
+            return handleEmergencyMessage(userId, telegramUserId);
+        }
+        String[] commandList = text.split("_");
+        if (commandList[0].equals("/alert")) {
+            if (commandList.length == 2) {
+                //alert_fire
+                return handleEmergencyMessageByType(userId, telegramUserId, text);
+            } else if (commandList.length == 3) {
+                //alert_fire_entrance
+                return handleEmergencyGetApartment(userId, telegramUserId, text);
+            } else if (commandList.length == 4) {
+                //alert_fire_entrance_flatId
+                return handleEmergencySendMessageByType(userId, telegramUserId, text);
+            } else if (commandList.length == 5) {
+                //alert_fire_entrance_flatId_send
+                return handleEmergencySendMessage(userId, telegramUserId, text);
+            }
+        }
         return handleNotFoundCommand(telegramUserId);
     }
 
@@ -479,8 +533,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
 
             Owner user = ownerService.getUser(telegramUserId);
             String userStr = String.format("""
-                    👤   Логин/Имя: <b>%s</b>
-                    ☎   Номер телефона: <b><a href="tel:%s">%s</a></b>
+                    👤 Логин/Имя: <b>%s</b>
+                    ☎ Номер телефона: <b><a href="tel:%s">%s</a></b>
                     """, user.getName(), user.getPhoneNum(), user.getPhoneNum());
 
             String apartStr = user.getApartmentList().stream().map(item -> String.format("""
@@ -546,6 +600,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
     private SendMessage handleBotCommand(String telegramUserId) throws TelegramApiException {
         SendMessage message = new SendMessage();
         message.setText("""
+                🚨 Бот умеет рассылать информацию о ЧП от соседей
                 ✨ Бот умеет рассылать задолженность
                 ✨ Добавлена ссылка на справочную по кварталу 21/19
                 ✨ Бот может искать соседей
@@ -605,7 +660,7 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return message;
         }
         message.setText("""
-                Далее укажите, пожалуйста, <b>номер этажа</b>, <b>квартиры</b> (почтовый), Ваше <b>имя или никнейм</b>, Ваш <b>номер телефона</b>.
+                Далее укажите, <b>номер этажа</b>, <b>квартиры</b> (почтовый), Ваше <b>имя или никнейм</b>, Ваш <b>номер телефона</b> (опционально) по-отдельности.
                 Эти данные нужны, чтобы избавиться от спама, а также иметь возможность получить дополнительный функционал. Данные будут доступны только администратору.
                 После проверки предоставленных сведений, Вам придёт ссылка на закрытый чат дома 44/2.
                 <a href="http://563603-cd36585.tmweb.ru/privacy.pdf">Политика конфиденциальности</a>                           
@@ -834,6 +889,221 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
             return messageSuccess;
         }
 
+    }
+
+    private SendMessage handleEmergencyMessage(String userId, String telegramUserId) throws TelegramApiException {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(telegramUserId));
+        message.setText("Что случилось?");
+
+        InlineKeyboardButton inlineKeyboardButtonFire = new InlineKeyboardButton();
+        inlineKeyboardButtonFire.setText("\uD83D\uDD25 Пожар");
+        inlineKeyboardButtonFire.setCallbackData(COMMANDS.FIRE.getCommand());
+
+        InlineKeyboardButton inlineKeyboardButtonSmoke = new InlineKeyboardButton();
+        inlineKeyboardButtonSmoke.setText("\uD83C\uDF2B️ Задымление");
+        inlineKeyboardButtonSmoke.setCallbackData(COMMANDS.SMOKE.getCommand());
+
+        InlineKeyboardButton inlineKeyboardButtonLeak = new InlineKeyboardButton();
+        inlineKeyboardButtonLeak.setText("\uD83D\uDCA6 Протечка");
+        inlineKeyboardButtonLeak.setCallbackData(COMMANDS.LEAK.getCommand());
+
+        InlineKeyboardButton inlineKeyboardButtonNoise = new InlineKeyboardButton();
+        inlineKeyboardButtonNoise.setText("\uD83D\uDD0A Шум");
+        inlineKeyboardButtonNoise.setCallbackData(COMMANDS.NOISE.getCommand());
+
+        InlineKeyboardButton inlineKeyboardButtonOther = new InlineKeyboardButton();
+        inlineKeyboardButtonOther.setText("\uD83D\uDD11️ Находка");
+        inlineKeyboardButtonOther.setCallbackData(COMMANDS.OTHER.getCommand());
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow2 = new ArrayList<>();
+        keyboardButtonsRow1.add(inlineKeyboardButtonFire);
+        keyboardButtonsRow1.add(inlineKeyboardButtonSmoke);
+        keyboardButtonsRow1.add(inlineKeyboardButtonLeak);
+        keyboardButtonsRow1.add(inlineKeyboardButtonNoise);
+        keyboardButtonsRow2.add(inlineKeyboardButtonOther);
+
+        keyboardButtons.add(keyboardButtonsRow1);
+        keyboardButtons.add(keyboardButtonsRow2);
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        return message;
+    }
+
+    private SendMessage handleEmergencyMessageByType(String userId, String telegramUserId, String command) throws TelegramApiException {
+        String[] commandList = command.split("_");
+
+        SendMessage message = new SendMessage();
+
+        message.setChatId(String.valueOf(telegramUserId));
+        message.setText("Вы хотите сообщить " + EMERGENCY_TYPE.get(commandList[1]) + " соседям");
+
+        InlineKeyboardButton inlineKeyboardButtonFireEntrance = new InlineKeyboardButton();
+        inlineKeyboardButtonFireEntrance.setText("Подъезду");
+        inlineKeyboardButtonFireEntrance.setCallbackData(command + "_entrance");
+
+        InlineKeyboardButton inlineKeyboardButtonFireFloor = new InlineKeyboardButton();
+        inlineKeyboardButtonFireFloor.setText("Этажу");
+        inlineKeyboardButtonFireFloor.setCallbackData(command + "_floor");
+
+        InlineKeyboardButton inlineKeyboardButtonFireHome = new InlineKeyboardButton();
+        inlineKeyboardButtonFireHome.setText("Всему дому");
+        inlineKeyboardButtonFireHome.setCallbackData(command + "_home");
+
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+
+        keyboardButtonsRow1.add(inlineKeyboardButtonFireEntrance);
+        keyboardButtonsRow1.add(inlineKeyboardButtonFireFloor);
+        keyboardButtonsRow1.add(inlineKeyboardButtonFireHome);
+
+        keyboardButtons.add(keyboardButtonsRow1);
+
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        return message;
+    }
+
+    private SendMessage handleEmergencyGetApartment(String userId, String telegramUserId, String command) throws TelegramApiException {
+        String[] commandList = command.split("_");
+        SendMessage message = new SendMessage();
+        Owner owner = ownerService.getUser(telegramUserId);
+        List<Apartment> apartmentList = owner.getApartmentList();
+        message.setText("В какой квартире Вы сейчас?");
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+        for (Apartment apartment : apartmentList) {
+            InlineKeyboardButton inlineKeyboardButtonFireSend = new InlineKeyboardButton();
+            inlineKeyboardButtonFireSend.setText(apartment.getId().toString());
+            inlineKeyboardButtonFireSend.setCallbackData(command + "_" + apartment.getId());
+            keyboardButtonsRow1.add(inlineKeyboardButtonFireSend);
+        }
+        keyboardButtons.add(keyboardButtonsRow1);
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        message.setReplyMarkup(inlineKeyboardMarkup);
+        return message;
+    }
+
+    private SendMessage handleEmergencySendMessageByType(String userId, String telegramUserId, String command) throws TelegramApiException {
+        String[] commandList = command.split("_");
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(telegramUserId));
+
+        message.setText("Всем соседям " + EMERGENCY_COVERAGE.get(commandList[2]) + " будет отправлено сообщение " + EMERGENCY_TYPE.get(commandList[1]) + ".");
+
+        InlineKeyboardButton inlineKeyboardButtonFireSend = new InlineKeyboardButton();
+        inlineKeyboardButtonFireSend.setText("✅Разослать сообщение");
+        inlineKeyboardButtonFireSend.setCallbackData(command + "_send");
+
+        InlineKeyboardButton inlineKeyboardButtonFireCancel = new InlineKeyboardButton();
+        inlineKeyboardButtonFireCancel.setText("❌Отменить");
+        inlineKeyboardButtonFireCancel.setCallbackData(command + "_cancel");
+
+        InlineKeyboardMarkup inlineKeyboardMarkup = new InlineKeyboardMarkup();
+
+        List<List<InlineKeyboardButton>> keyboardButtons = new ArrayList<>();
+        List<InlineKeyboardButton> keyboardButtonsRow1 = new ArrayList<>();
+
+        keyboardButtonsRow1.add(inlineKeyboardButtonFireSend);
+        keyboardButtonsRow1.add(inlineKeyboardButtonFireCancel);
+
+        keyboardButtons.add(keyboardButtonsRow1);
+
+        inlineKeyboardMarkup.setKeyboard(keyboardButtons);
+        message.setReplyMarkup(inlineKeyboardMarkup);
+
+        return message;
+    }
+
+    private SendMessage handleEmergencySendMessage(String userId, String telegramUserId, String command) throws TelegramApiException {
+        if (!ownerService.isUserExist(telegramUserId)) {
+            SendMessage messageSuccess = new SendMessage();
+            messageSuccess.setText("⚠️У вас нет доступа к данному функционалу!");
+            messageSuccess.setChatId(String.valueOf(telegramUserId));
+            return messageSuccess;
+        }
+
+        String[] commandList = command.split("_");
+        SendMessage message = new SendMessage();
+
+        if (commandList[4].equals("send") && !logService.checkUserSendMoreOneCommand(telegramUserId, command)) {
+            Owner owner = ownerService.getUser(telegramUserId);
+            String textForNeighbors = String.format("""
+                            🔴 Ваш сосед %s <a href="tg://user?id=%s">%s</a> из квартиры %s сообщает вам %s. Свяжитесь с ним для уточнения информации.
+                            """,
+                    EMERGENCY_COVERAGE.get(commandList[2]),
+                    owner.getTelegramId(),
+                    owner.getName(), commandList[3], EMERGENCY_TYPE.get(commandList[1]));
+            List<Apartment> apartmentList = owner.getApartmentList();
+            Optional<Apartment> ownerApartment = apartmentList.stream()
+                    .filter(x -> x.getId() == Integer.parseInt(commandList[3]))
+                    .findFirst();
+            if (ownerApartment.isPresent()) {
+                List<Apartment> apartmentForSend;
+                if (Objects.equals(commandList[2], "floor")) {
+                    apartmentForSend = apartmentService.getFloorApartments(ownerApartment.get().getFloor(), ownerApartment.get().getEntrance());
+
+                } else if (Objects.equals(commandList[2], "entrance")) {
+                    apartmentForSend = apartmentService.getEntranceApartments(ownerApartment.get().getEntrance());
+
+                } else if (Objects.equals(commandList[2], "home")) {
+                    apartmentForSend = apartmentService.getAllApartment();
+                } else {
+                    apartmentForSend = new ArrayList<>();
+                }
+                sendInfoToUser(telegramUserId, "Подождите...", null);
+                apartmentForSend.forEach(apartment -> {
+                            if (ownerApartment.get().getId() != apartment.getId()) {
+                                apartment.getOwnerList().forEach(apartmentOwner -> {
+                                    try {
+                                        sendInfoToUser(apartmentOwner.getTelegramId(), textForNeighbors, null);
+                                        if (apartmentForSend.size() > 10) {
+                                            Random rand = new Random();
+                                            Thread.sleep(rand.nextInt(50) * 100);
+                                        }
+                                    } catch (TelegramApiException ignored) {
+                                        // пользователь не подключался к боту или приватен
+                                    } catch (InterruptedException ignored) {
+
+                                    }
+                                });
+                            }
+                        }
+                );
+                logService.save(owner.getTelegramId(), command);
+                sendInfoToSupportAdmins("Пользователь отправил сообщение о ЧП: " + textForNeighbors, null);
+            }
+            message.setText("""
+                    Сообщения соседям разосланы ✅
+                    В случае пожара сообщите о нем по номеру 112
+                    В случае протечки звоните в диспетчерскую +7(495)-204-90-02
+                    В случае противоправных действий/порче имущества звоните в охрану +7(964)-725-94-97
+                    """);
+        } else {
+            if (logService.checkUserSendMoreOneCommand(telegramUserId, command))
+                message.setText("""
+                        Сообщения не были разосланы ❌
+                        Вы уже рассылали такое сообщение, разрешено не более 1 сообщения в час
+                        """);
+            else
+                message.setText("""
+                        Сообщения не были разосланы ❌
+                        В случае пожара сообщите о нем по номеру 112
+                        В случае протечки звоните в диспетчерскую +7(495)-204-90-02
+                        В случае противоправных действий/порче имущества звоните в охрану +7(964)-725-94-97
+                        """);
+        }
+        return message;
     }
 
     private SendMessage handleAccessAddCommand(String userId, String telegramUserId) throws TelegramApiException {
@@ -1191,6 +1461,10 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
         inlineKeyboardButtonAccess.setText(ACCESS_LABEL);
         inlineKeyboardButtonAccess.setCallbackData(COMMANDS.ACCESS.getCommand());
 
+        InlineKeyboardButton inlineKeyboardButtonEmergency = new InlineKeyboardButton();
+        inlineKeyboardButtonEmergency.setText(STATE_OF_EMERGENCY_LABEL);
+        inlineKeyboardButtonEmergency.setCallbackData(COMMANDS.SEND_EMERGENCY_MESSAGE.getCommand());
+
         InlineKeyboardButton inlineKeyboardButtonSearch = new InlineKeyboardButton();
         inlineKeyboardButtonSearch.setText(FIND_LABEL);
         inlineKeyboardButtonSearch.setCallbackData(COMMANDS.FIND_NEIGHBORS.getCommand());
@@ -1239,8 +1513,8 @@ public class TelegramBotHandler extends TelegramLongPollingBot {
                 keyboardButtonsRow3.add(bannedHomeButton);
             } else
                 keyboardButtonsRow3.add(inlineKeyboardButtonAccess);
-            // пользователь зарегистрирован
-        else {
+        else {// пользователь зарегистрирован
+            keyboardButtonsRow4.add(inlineKeyboardButtonEmergency);
             keyboardButtonsRow4.add(inlineKeyboardButtonSearch);
         }
 

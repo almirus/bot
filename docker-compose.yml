@@ -1,7 +1,9 @@
 version: "3.9"
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: botapp
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:$DB_IN_PORT/postgres
@@ -10,6 +12,16 @@ services:
     restart: always
     depends_on:
       - db
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:$WEB_IN_PORT/actuator/health  || exit 1
+      interval: 1m30s
+      timeout: 20s
+      retries: 5
+      start_period: 40s
+    ports:
+      - "$WEB_OUT_PORT:$WEB_IN_PORT"
   db:
     image: postgres
     container_name: db
@@ -21,7 +33,17 @@ services:
       - POSTGRES_DB=$POSTGRES_DB
       - PGDATA=$PGDATA
     ports:
-      - "$DB_IN_PORT:$DB_OUT_PORT"
+      - "$DB_OUT_PORT:$DB_IN_PORT"
     volumes:
       - /var/lib/postgresql/data
     restart: always
+  autoheal:
+    image: willfarrell/autoheal:latest
+    tty: true
+    restart: always
+    environment:
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=300
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
