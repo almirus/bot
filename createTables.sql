@@ -1,3 +1,4 @@
+-- we don't know how to generate root <with-no-name> (class Root) :(
 create sequence owner_id_seq
     as integer;
 
@@ -8,6 +9,10 @@ create sequence tmp_owner_id_seq
 
 alter sequence tmp_owner_id_seq owner to postgres;
 
+create sequence tmp_owner_id_seq1
+    as integer;
+
+alter sequence tmp_owner_id_seq1 owner to postgres;
 
 create table apartment
 (
@@ -63,7 +68,7 @@ alter sequence owner_id_seq owned by owner.id;
 
 create table tmp_owner
 (
-    id          serial
+    id          integer   default nextval('tmp_owner_id_seq1'::regclass) not null
         constraint tmp_owner_pk
             primary key,
     real_num    integer,
@@ -80,10 +85,10 @@ comment on table tmp_owner is 'временная таблица, хранят �
 alter table tmp_owner
     owner to postgres;
 
+alter sequence tmp_owner_id_seq1 owned by tmp_owner.id;
+
 create unique index tmp_owner_id_uindex
     on tmp_owner (id);
-
-alter sequence tmp_owner_id_seq owned by tmp_owner.id;
 
 create table debt
 (
@@ -98,5 +103,28 @@ create table debt
 comment on table debt is 'долги';
 
 alter table debt
+    owner to postgres;
+
+create table user_log
+(
+    telegram_id varchar,
+    log         text,
+    create_date timestamp,
+    log_id      serial
+);
+
+alter table user_log
+    owner to postgres;
+
+create table news
+(
+    news_id     serial,
+    news_body   text,
+    send_type   integer,
+    create_date timestamp,
+    send_date   timestamp
+);
+
+alter table news
     owner to postgres;
 
