@@ -7,19 +7,13 @@ public enum Permission implements Comparable<Permission> {
         if (permission == null) {
             return null;
         }
-        switch (permission) {
-            case 0:
-                return ANY;
-            case 1:
-                return USER;
-            case 2:
-                return ADMIN;
-            case 3:
-                return OWNER;
-            case 4:
-                return BANNED;
-            default:
-                throw new IllegalArgumentException("unknown Permission [" + permission + "]");
-        }
+        return switch (permission) {
+            case 0 -> ANY;
+            case 1 -> USER;
+            case 2 -> ADMIN;
+            case 3 -> OWNER;
+            case 4 -> BANNED;
+            default -> throw new IllegalArgumentException("unknown Permission [" + permission + "]");
+        };
     }
 }

@@ -1,6 +1,8 @@
 package com.almirus.kvartalyBot.dal.entity;
 
 import lombok.Data;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import javax.persistence.*;
 import java.io.Serializable;
@@ -24,10 +26,18 @@ public class Owner implements Serializable {
     @Column(name = "telegram_id")
     private String telegramId;
 
-    @ManyToMany
-    @JoinTable(name="apartment_owner",
-    joinColumns = @JoinColumn(name = "owner_id"),
-    inverseJoinColumns = @JoinColumn(name = "apartment_real_num"))
+    @ManyToMany(fetch = FetchType.LAZY,
+            cascade =
+                    {
+                            CascadeType.DETACH,
+                            CascadeType.MERGE,
+                            CascadeType.REFRESH,
+                            CascadeType.PERSIST
+                    })
+    @JoinTable(name = "apartment_owner",
+            joinColumns = @JoinColumn(name = "owner_id"),
+            inverseJoinColumns = @JoinColumn(name = "apartment_real_num"))
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private List<Apartment> apartmentList = new java.util.ArrayList<>();
 
 
